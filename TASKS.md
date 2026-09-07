@@ -37,9 +37,18 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 - [ ] **B4 — Service-role Supabase key used as primary DB client** (`backend/services/db.py:19`)
       Bypasses Row Level Security; combined with B2/B3 = any request has full
       table access. **Still open** — real fix needs B2 (auth) done first.
-- [ ] **B5 — Committed `.env` with live Supabase project URL** (`.env`, repo root)
+- [x] **B5 — Committed `.env` with live Supabase project URL** (`.env`, repo root)
       Should be `.env.example` + gitignored (frontend anon key; separately verify
       no service keys are ever committed).
+      *(Fixed 2026-09-07 — `git rm --cached .env`, added `.env`/`backend/.env`
+      to `.gitignore`, added a proper `.env.example` with empty placeholders.
+      The local `.env` file is untouched on disk so existing dev setups keep
+      working. Note: only the anon key (meant to be public per Supabase's
+      model, protected by RLS) was in it, not a service key — verified no
+      service-role keys are or have been committed anywhere in this repo. The
+      exposed anon key/URL are still visible in prior git history; true
+      rotation would mean regenerating the anon key in the Supabase dashboard
+      — didn't do that since it's a live project decision, flagging for you.)*
 - [ ] **B6 — Most "AI generation" is hardcoded stub data** (`backend/models/inference.py:80-125`)
       bassline/melody/chords/arrangement ignore mood/complexity/density/preferences,
       return same static pattern per genre. Only drums do anything real.
@@ -67,9 +76,19 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
       *(Fixed 2026-09-07 — narrowed to `(OSError, json.JSONDecodeError)` and
       added `logger.exception(...)` so a bad patterns file is visible in logs
       instead of silently degrading every drum request to random generation.)*
-- [ ] **B10 — `training/` scripts will `ModuleNotFoundError` immediately**
-      `requirements.txt`/`pyproject.toml` only list fastapi/uvicorn/pydantic/
-      dotenv/supabase — no ML libs for anything under `backend/training/`.
+- [x] **B10 — corrected, was a false positive** (`backend/training/*.py`, `backend/models/train_drums.py`)
+      Original claim: "will `ModuleNotFoundError` immediately" because no
+      `training/__init__.py` exists and no ML libs are listed. *(Checked
+      2026-09-07 — verified by actually importing and running
+      `models.train_drums.run(...)`: it works. `training/` is a valid Python
+      3 implicit namespace package (no `__init__.py` needed since 3.3), and
+      every function in `training/*.py` (`train`, `preprocess`,
+      `build_dataset`, `evaluate`, `schedule_retraining`) is a trivial no-op
+      stub with zero imports beyond `datetime` — no ML libs are actually used
+      anywhere yet, so there's nothing to be missing. The real gap here is
+      the same shape as B6: this is 100% placeholder scaffolding with no real
+      training logic. Folding the "real gap" half of this into B6's scope
+      rather than tracking separately.)*
 - [~] **B11 — Two deployed Supabase edge functions are dead code**
       (`supabase/functions/generate-music`, `supabase/functions/pulse-chat`)
       Nothing in `src/` calls them; frontend talks only to the FastAPI backend
@@ -81,12 +100,29 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
       unreferenced by `src/` — still needs a decision on whether to delete it
       or keep it as a documented alternative entry point.
       `generate-music/index.ts` is untouched and still fully orphaned.)*
-- [ ] **B12 — Wildcard CORS + no rate limiting on edge functions** (`supabase/functions/_shared/cors.ts:1-4`)
+- [~] **B12 — Wildcard CORS + no rate limiting on edge functions** (`supabase/functions/_shared/cors.ts:1-4`)
       A leaked anon key lets anyone burn AI API budget with no validation.
-- [ ] **B13 — Unchecked AI response shape in edge functions**
+      *(2026-09-07 — added the achievable half: input validation (required
+      fields, length caps) on both `pulse-chat` and `generate-music`, so at
+      least malformed/oversized requests are rejected before hitting the AI
+      provider. Left `cors.ts`'s wildcard origin alone — Supabase edge
+      functions gate access via `verify_jwt` (checks the caller has a valid
+      anon/user JWT), which is the real access-control layer here, not CORS;
+      changing that is a Supabase project-level config decision, not a code
+      fix. Real per-user rate limiting still needs a small piece of
+      infra (e.g. a Supabase table tracking calls per user/IP) — not done,
+      out of scope for a quick fix. **Also note: these edge function changes
+      are only in the repo — they need `supabase functions deploy` to
+      actually take effect, which I haven't run since it touches the live
+      Supabase project.***
+- [x] **B13 — Unchecked AI response shape in edge functions**
       (`supabase/functions/generate-music/index.ts:59`, `pulse-chat/index.ts:61`)
       `data.choices[0].message.content` assumes well-formed response; throws
       raw TypeError on unexpected shape.
+      *(Fixed 2026-09-07 — both functions now use optional chaining and
+      return a clean `502 {"error":"AI service returned no content"}` instead
+      of an unhandled TypeError when the upstream response is malformed.
+      Same caveat as B12: needs deploying to take effect.)*
 - [ ] **B14 — Client-side-only generation limit, not enforced server-side** (`src/ai/LocalLearning.js:38-46`)
       Trivially bypassed via clearing localStorage; backend never independently
       checks a real limit (ties into B1).
