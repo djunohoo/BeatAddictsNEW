@@ -26,6 +26,10 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 - [ ] **B2 — No auth on any backend endpoint** (`backend/app/main.py:44-127`)
       `user_id` is free text, no session/JWT verification. Anyone can write
       feedback/MIDI/training records under an arbitrary `user_id`.
+      **Decision 2026-09-07:** holding off — there's no login/session UI in
+      the frontend yet, so backend JWT verification would have nothing to
+      verify against. Needs a cross-lane design (frontend login flow +
+      backend verification) before this can be done for real. Not a quick fix.
 - [x] **B3 — Invalid CORS config** (`backend/app/main.py:18-24`)
       `allow_origins=["*"]` + `allow_credentials=True` is spec-invalid and
       browser-behavior-dependent.
@@ -49,9 +53,24 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
       exposed anon key/URL are still visible in prior git history; true
       rotation would mean regenerating the anon key in the Supabase dashboard
       — didn't do that since it's a live project decision, flagging for you.)*
-- [ ] **B6 — Most "AI generation" is hardcoded stub data** (`backend/models/inference.py:80-125`)
+- [x] **B6 — Most "AI generation" is hardcoded stub data** (`backend/models/inference.py:80-125`)
       bassline/melody/chords/arrangement ignore mood/complexity/density/preferences,
       return same static pattern per genre. Only drums do anything real.
+      *(Fixed 2026-09-07, per product decision: "procedural rules upgrade" —
+      not an ML model, but real music-theory-based generation. Added
+      `backend/models/music_theory.py`: deterministic key/scale selection
+      per genre+mood (major for Energetic/Uplifting/Epic, minor for
+      Dark/Chill/Minimal), diatonic chord progressions with real triad-quality
+      computation (major/minor/diminished, +7ths at high complexity), a
+      constrained random-walk melody generator whose step size scales with
+      complexity and note count scales with density, a walking bassline
+      following the chord progression's roots with complexity-driven passing
+      tones, and an arrangement length that grows with complexity. Same
+      (genre, mood, complexity, density) always produces the same output
+      (seeded), different inputs genuinely produce different output — verified
+      across all 6 genre/mood combos and via live HTTP calls to all four
+      endpoints. `generate_drums` was already real (patterns.json-backed);
+      untouched.)*
 - [x] **B7 — Pulse chat backend is a hardcoded placeholder** (`backend/app/main.py:89-92`)
       Always returns the same string; `conversationHistory` accepted but unused.
       *(Fixed 2026-09-07 — added `backend/services/pulse.py`, calling the same
@@ -123,12 +142,21 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
       return a clean `502 {"error":"AI service returned no content"}` instead
       of an unhandled TypeError when the upstream response is malformed.
       Same caveat as B12: needs deploying to take effect.)*
-- [ ] **B14 — Client-side-only generation limit, not enforced server-side** (`src/ai/LocalLearning.js:38-46`)
+- [x] **B14 — Client-side-only generation limit, not enforced server-side** (`src/ai/LocalLearning.js:38-46`)
       Trivially bypassed via clearing localStorage; backend never independently
       checks a real limit (ties into B1).
+      *(Resolved 2026-09-07 as part of B1 — the backend now enforces a real
+      server-side daily cap via `services/legal.py`/`count_recent_generations`,
+      independent of anything the client sends or has in localStorage.
+      `LocalLearning.js`'s client-side counter is still there for UI/UX
+      purposes (showing the user their usage) but is no longer the actual
+      enforcement mechanism — that's fine, it's just no longer load-bearing.)*
 - [ ] **B15 — Duplicate/diverging fake drum generator, dead code** (`src/ai/DrumEngine.js`)
       Never imported anywhere; structurally different from `AIWorkflow.js`'s
       fallback generator. Decide: delete or consolidate.
+      *(Confirmed 2026-09-07 — grepped `src/` for `DrumEngine`, zero matches
+      anywhere including the filename itself. Safe to delete. Left for Carrie
+      since it's a `src/` file — frontend lane.)*
 
 ## Frontend lane (Carrie)
 

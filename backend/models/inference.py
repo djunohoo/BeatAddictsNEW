@@ -4,6 +4,8 @@ import json
 import os
 from typing import Dict, Any
 
+from . import music_theory
+
 logger = logging.getLogger("beataddicts.inference")
 
 # Load patterns from JSON file
@@ -82,48 +84,20 @@ def generate_drums(req) -> Dict[str, Any]:
 
 
 def generate_bassline(req) -> Dict[str, Any]:
-    # Simple bassline patterns based on genre
-    basslines = {
-        'Electronic': [36, 38, 40, 36],
-        'Hip Hop': [36, 36, 40, 38],
-        'House': [36, 36, 36, 36],
-        'Trap': [36, 40, 36, 40],
-        'Lo-Fi': [36, 38, 36, 38],
-        'Ambient': [36, 36, 36, 36]
-    }
-    notes = basslines.get(req.genre, [36, 38, 40, 36])
-    return {"notes": notes, "meta": {"model": "bass_v1", "genre": req.genre}}
+    notes = music_theory.build_bassline(req.genre, req.mood, req.complexity, req.density)
+    return {"notes": notes, "meta": {"model": "bass_v2", "genre": req.genre, "mood": req.mood}}
 
 
 def generate_melody(req) -> Dict[str, Any]:
-    # Simple melodic patterns
-    melodies = {
-        'Electronic': [60, 62, 64, 65, 67, 65, 64, 62],
-        'Hip Hop': [60, 60, 64, 67],
-        'House': [62, 65, 67, 69],
-        'Trap': [60, 63, 67, 70],
-        'Lo-Fi': [60, 62, 60, 62],
-        'Ambient': [60, 62, 67, 69]
-    }
-    notes = melodies.get(req.genre, [60, 62, 64, 65])
-    return {"notes": notes, "meta": {"model": "melody_v1", "genre": req.genre}}
+    notes = music_theory.build_melody(req.genre, req.mood, req.complexity, req.density)
+    return {"notes": notes, "meta": {"model": "melody_v2", "genre": req.genre, "mood": req.mood}}
 
 
 def generate_chords(req) -> Dict[str, Any]:
-    # Genre-specific chord progressions
-    progressions = {
-        'Electronic': ["C", "F", "G", "C"],
-        'Hip Hop': ["C", "C", "G", "C"],
-        'House': ["A", "A", "E", "A"],
-        'Trap': ["C", "G", "D", "A"],
-        'Lo-Fi': ["C", "F", "C", "G"],
-        'Ambient': ["Am", "F", "C", "G"]
-    }
-    chords = progressions.get(req.genre, ["C", "F", "G", "C"])
-    return {"chords": chords, "meta": {"model": "chords_v1", "genre": req.genre}}
+    chords = music_theory.build_chords(req.genre, req.mood, req.complexity)
+    return {"chords": chords, "meta": {"model": "chords_v2", "genre": req.genre, "mood": req.mood}}
 
 
 def generate_arrangement(req) -> Dict[str, Any]:
-    sections = ["intro", "verse", "chorus", "verse",
-                "chorus", "bridge", "chorus", "outro"]
-    return {"sections": sections, "meta": {"model": "arrangement_v1", "genre": req.genre}}
+    sections = music_theory.build_arrangement(req.complexity)
+    return {"sections": sections, "meta": {"model": "arrangement_v2", "genre": req.genre}}
