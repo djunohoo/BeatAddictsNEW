@@ -1,4 +1,4 @@
-const DEFAULT_BASE_URL = import.meta.env.VITE_AI_BASE_URL || 'http://localhost:8000';
+const DEFAULT_BASE_URL = import.meta.env.VITE_AI_BASE_URL || '/api';
 
 const postJson = async (path, body) => {
   const res = await fetch(`${DEFAULT_BASE_URL}${path}`, {
