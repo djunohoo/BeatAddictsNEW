@@ -6,6 +6,7 @@ import {
   RefreshCw,
   Shuffle,
   Save,
+  FolderOpen,
   Waves,
   SlidersHorizontal,
   ShieldCheck,
@@ -55,7 +56,10 @@ export const Mixer = () => {
     updateTrack,
     randomize,
     reset,
-    anySolo
+    anySolo,
+    saveSnapshot: saveSnapshotToStore,
+    loadSnapshot,
+    hasSnapshot
   } = useMixStore();
   const [meters, setMeters] = useState<Record<TrackId, number>>(() => {
     const m: Record<TrackId, number> = {} as Record<TrackId, number>;
@@ -80,11 +84,32 @@ export const Mixer = () => {
     return () => clearInterval(timer);
   }, [anySolo, tracks]);
 
-  const saveSnapshot = () => {
-    toast({
-      title: 'Snapshot saved',
-      description: 'Settings stored locally for this session.'
-    });
+  const handleSaveSnapshot = () => {
+    saveSnapshotToStore();
+    if (hasSnapshot()) {
+      toast({
+        title: 'Snapshot saved',
+        description: 'Mix settings saved to this browser — use Load Snapshot to recall them.'
+      });
+    } else {
+      toast({
+        title: 'Snapshot not saved',
+        description: "Couldn't write to local storage (private browsing or storage full?).",
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleLoadSnapshot = () => {
+    if (loadSnapshot()) {
+      toast({ title: 'Snapshot loaded', description: 'Restored your last saved mix settings.' });
+    } else {
+      toast({
+        title: 'No snapshot found',
+        description: 'Save a snapshot first before trying to load one.',
+        variant: 'destructive'
+      });
+    }
   };
 
   const renderMeter = (value: number, accent: string) => (
@@ -116,7 +141,11 @@ export const Mixer = () => {
               <Shuffle className="w-4 h-4 mr-2" />
               Randomize
             </Button>
-            <Button className="bg-gradient-to-r from-neon-purple to-neon-cyan" onClick={saveSnapshot}>
+            <Button variant="outline" onClick={handleLoadSnapshot}>
+              <FolderOpen className="w-4 h-4 mr-2" />
+              Load Snapshot
+            </Button>
+            <Button className="bg-gradient-to-r from-neon-purple to-neon-cyan" onClick={handleSaveSnapshot}>
               <Save className="w-4 h-4 mr-2" />
               Save Snapshot
             </Button>

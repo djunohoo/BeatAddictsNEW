@@ -143,12 +143,12 @@ export const Sequencer = () => {
     if (!ctx) return;
 
     const nextSamples: LoadedSample[] = [];
-    let errorMessage = '';
+    const errorMessages: string[] = [];
 
     for (let i = 0; i < files.length; i += 1) {
       const file = files[i];
       if (!isSupportedAudioFile(file)) {
-        errorMessage = `${file.name} is not a supported audio file.`;
+        errorMessages.push(`${file.name} is not a supported audio file.`);
         continue;
       }
 
@@ -156,7 +156,7 @@ export const Sequencer = () => {
         const loaded = await loadAudioFile(ctx, file);
         nextSamples.push(loaded);
       } catch (error: any) {
-        errorMessage = `${file.name} could not be decoded: ${error?.message || 'invalid audio file'}`;
+        errorMessages.push(`${file.name} could not be decoded: ${error?.message || 'invalid audio file'}`);
       }
     }
 
@@ -168,11 +168,12 @@ export const Sequencer = () => {
       });
     }
 
-    if (errorMessage) {
-      setSampleLoadError(errorMessage);
+    if (errorMessages.length > 0) {
+      const combinedMessage = errorMessages.join(' ');
+      setSampleLoadError(combinedMessage);
       toast({
-        title: 'Sample Load Warning',
-        description: errorMessage,
+        title: errorMessages.length > 1 ? `${errorMessages.length} Sample Load Warnings` : 'Sample Load Warning',
+        description: combinedMessage,
         variant: 'destructive'
       });
     }
