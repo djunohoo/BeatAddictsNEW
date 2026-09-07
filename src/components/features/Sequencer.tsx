@@ -19,19 +19,56 @@ const INSTRUMENTS = [
 
 type Pattern = Record<string, boolean[]>;
 
+type SequencerSession = {
+  pattern: Pattern;
+  bpm: number;
+  currentPattern: number;
+  selectedGenre: string;
+  selectedMood: string;
+  selectedStyle: string;
+  complexity: number;
+  density: number;
+};
+
+const SESSION_KEY = 'beataddicts_sequencer_session';
+
+const buildDefaultPattern = (): Pattern => {
+  const initialPattern: Pattern = {};
+  INSTRUMENTS.forEach(inst => {
+    initialPattern[inst.id] = Array(16).fill(false);
+  });
+  return initialPattern;
+};
+
+const isValidPattern = (value: unknown): value is Pattern =>
+  !!value && typeof value === 'object' &&
+  INSTRUMENTS.every((inst) => Array.isArray((value as Pattern)[inst.id]));
+
+const loadSession = (): Partial<SequencerSession> => {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return isValidPattern(parsed.pattern) ? parsed : { ...parsed, pattern: undefined };
+  } catch {
+    return {};
+  }
+};
+
 export const Sequencer = () => {
   const { toast } = useToast();
-  const [currentPattern, setCurrentPattern] = useState(1);
+  const [savedSession] = useState(loadSession);
+  const [currentPattern, setCurrentPattern] = useState(savedSession.currentPattern ?? 1);
   const [patterns] = useState([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-  const [selectedGenre, setSelectedGenre] = useState('Tech House');
-  const [selectedMood, setSelectedMood] = useState('Energetic');
-  const [selectedStyle, setSelectedStyle] = useState('Topline Tech House');
-  const [complexity, setComplexity] = useState(60);
-  const [density, setDensity] = useState(70);
+  const [selectedGenre, setSelectedGenre] = useState(savedSession.selectedGenre ?? 'Tech House');
+  const [selectedMood, setSelectedMood] = useState(savedSession.selectedMood ?? 'Energetic');
+  const [selectedStyle, setSelectedStyle] = useState(savedSession.selectedStyle ?? 'Topline Tech House');
+  const [complexity, setComplexity] = useState(savedSession.complexity ?? 60);
+  const [density, setDensity] = useState(savedSession.density ?? 70);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isHealthChecking, setIsHealthChecking] = useState(false);
-  const [bpm, setBpm] = useState(124);
+  const [bpm, setBpm] = useState(savedSession.bpm ?? 124);
   const [currentStep, setCurrentStep] = useState(0);
   const [savedPatterns, setSavedPatterns] = useState<Array<{ id: string; name: string; genre: string; mood: string; style: string; pattern: Pattern }>>([]);
   const [selectedSavedPatternId, setSelectedSavedPatternId] = useState('');
@@ -50,15 +87,30 @@ export const Sequencer = () => {
   const tracks = useMixStore(state => state.tracks);
   const updateTrack = useMixStore(state => state.updateTrack);
 
-  // Initialize pattern with 16 steps for each instrument
-  const [pattern, setPattern] = useState<Pattern>(() => {
-    const initialPattern: Pattern = {};
-    INSTRUMENTS.forEach(inst => {
-      initialPattern[inst.id] = Array(16).fill(false);
-    });
-    return initialPattern;
-  });
+  // Initialize pattern with 16 steps for each instrument, restoring the
+  // last session from localStorage if one was saved.
+  const [pattern, setPattern] = useState<Pattern>(() => savedSession.pattern ?? buildDefaultPattern());
   patternRef.current = pattern;
+
+  // Autosave the current session so a refresh doesn't lose in-progress work.
+  useEffect(() => {
+    try {
+      const session: SequencerSession = {
+        pattern,
+        bpm,
+        currentPattern,
+        selectedGenre,
+        selectedMood,
+        selectedStyle,
+        complexity,
+        density
+      };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    } catch {
+      // localStorage unavailable (private browsing, storage full, etc.) —
+      // autosave silently no-ops rather than breaking the editor.
+    }
+  }, [pattern, bpm, currentPattern, selectedGenre, selectedMood, selectedStyle, complexity, density]);
 
   const toggleStep = (instrumentId: string, stepIndex: number) => {
     setPattern((prev) => ({

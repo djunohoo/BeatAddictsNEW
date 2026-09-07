@@ -195,12 +195,32 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
       *(Fixed 2026-09-07 — the just-sent message is now appended explicitly
       to the history payload. Verified in-browser: sent a message, confirmed
       the request reached the backend correctly.)*
-- [ ] **F7 — No React Router mounted despite dependency present** (`src/App.tsx`, `src/main.tsx`)
+- [x] **F7 — No React Router mounted despite dependency present** (`src/App.tsx`, `src/main.tsx`)
       `Index.tsx`/`NotFound.tsx` unreachable dead code; `NotFound` would throw
       if ever rendered outside a Router (`useLocation`).
-- [ ] **F8 — No persistence anywhere** (`src/stores/*.ts`, `src/App.tsx` activeTab state)
+      *(Resolved 2026-09-07, per product decision: the app doesn't need
+      URL-based navigation (no deep-linking/bookmarking use case), so removed
+      the dead scaffolding instead of building routing nobody needs — deleted
+      `src/pages/Index.tsx` and `src/pages/NotFound.tsx`, uninstalled
+      `react-router-dom` via npm (updates package.json + lockfile cleanly).
+      Verified: typecheck clean, app loads fine.)*
+- [x] **F8 — No persistence anywhere** (`src/stores/*.ts`, `src/App.tsx` activeTab state)
       No Zustand `persist` middleware; refresh silently loses entire session,
       no autosave/warning.
+      *(Fixed 2026-09-07 — added Zustand `persist` middleware to
+      `projectStore.ts` (localStorage-backed, only `currentProject` persisted,
+      not the transient `isPlaying`/`currentStep` playback state). **Important
+      discovery made while verifying this**: `Sequencer.tsx` — the actual
+      step-grid editing surface — never used `projectStore` at all; its
+      `pattern`/`bpm`/genre-mood-style/complexity/density are entirely
+      separate local `useState`, completely disconnected from the store. So
+      persisting `projectStore` alone would NOT have fixed the real pain
+      point (losing sequencer edits on refresh). Per follow-up decision, also
+      added a separate localStorage-backed session save/restore directly in
+      `Sequencer.tsx` (validates shape on load, falls back to defaults if
+      corrupt/missing). Verified in-browser: added 2 notes + changed BPM to
+      140, reloaded the page, both fully restored. `App.tsx`'s `activeTab`
+      remains unpersisted (minor, low-stakes — just which tab was open).)*
 - [x] **F9 — Supabase client throws at module load if env vars missing** (`src/lib/supabase.ts:6-8`)
       No ErrorBoundary anywhere in the app; misconfigured deploy = instant
       white screen.
