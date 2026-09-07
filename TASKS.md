@@ -171,8 +171,16 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 - [ ] **F2 — Frontend silently fakes AI results on any backend failure** (`src/ai/AIWorkflow.js:66-141`)
       Bare `catch {}` on every fetch failure substitutes `Math.random()` patterns
       or canned text, no user-facing indication generation failed.
-- [ ] **F3 — Playback ignores live pattern/BPM edits** (`src/components/features/Sequencer.tsx:564-594`)
+- [x] **F3 — Playback ignores live pattern/BPM edits** (`src/components/features/Sequencer.tsx:564-594`)
       Stale closure in `setInterval` over `pattern`/`bpm` at Play time.
+      *(Fixed 2026-09-07 — added a `patternRef` kept in sync during render so
+      the running interval always reads the current pattern (fixes step
+      toggles doing nothing mid-playback); extracted interval creation into
+      `scheduleTicks()` and added a `useEffect` on `bpm` that restarts the
+      interval at the new tempo when it changes while playing. Verified
+      in-browser: toggled a step mid-playback (note count updated instantly,
+      no interruption), dragged BPM from 124→140 mid-playback (step counter
+      kept advancing cleanly, no stutter/crash).)*
 - [x] **F4 — BPM field accepts NaN** (`src/components/layout/Header.tsx:49`)
       `parseInt('')` on emptied field writes `NaN` into the project store.
       *(Fixed 2026-09-07 — `setBPM` in `projectStore.ts` now guards with

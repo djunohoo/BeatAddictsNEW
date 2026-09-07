@@ -40,6 +40,7 @@ export const Sequencer = () => {
   const [healthResults, setHealthResults] = useState<HealthCheckResult[] | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const intervalRef = useRef<number | null>(null);
+  const patternRef = useRef<Pattern>();
 
   const PATTERN_LIBRARY_KEY = 'beataddicts_saved_patterns';
   const genreOptions = ['Tech House', 'Deep House', 'Techno', 'Minimal', 'Progressive', 'Acid', 'Electro', 'House', 'Bass House / Hybrid Trap', 'Trap', 'Lo-Fi', 'Ambient'];
@@ -57,6 +58,7 @@ export const Sequencer = () => {
     });
     return initialPattern;
   });
+  patternRef.current = pattern;
 
   const toggleStep = (instrumentId: string, stepIndex: number) => {
     setPattern((prev) => ({
@@ -562,6 +564,25 @@ export const Sequencer = () => {
     osc.stop(time + 0.2);
   };
 
+  const scheduleTicks = (tickBpm: number) => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    const stepMs = (60_000 / tickBpm) / 4;
+    intervalRef.current = window.setInterval(() => {
+      setCurrentStep((prev) => {
+        const next = (prev + 1) % 16;
+        const livePattern = patternRef.current;
+        INSTRUMENTS.forEach((inst) => {
+          if (livePattern?.[inst.id]?.[next]) {
+            playHit(inst.id);
+          }
+        });
+        return next;
+      });
+    }, stepMs);
+  };
+
   const startPlayback = async () => {
     if (isPlaying) return;
 
@@ -579,20 +600,17 @@ export const Sequencer = () => {
     if (!ctx) return;
 
     setIsPlaying(true);
-
-    const stepMs = (60_000 / bpm) / 4;
-    intervalRef.current = window.setInterval(() => {
-      setCurrentStep((prev) => {
-        const next = (prev + 1) % 16;
-        INSTRUMENTS.forEach((inst) => {
-          if (pattern[inst.id][next]) {
-            playHit(inst.id);
-          }
-        });
-        return next;
-      });
-    }, stepMs);
+    scheduleTicks(bpm);
   };
+
+  // Restart the tick interval at the new tempo when BPM changes mid-playback,
+  // instead of leaving a stale-closure interval running at the old rate.
+  useEffect(() => {
+    if (isPlaying) {
+      scheduleTicks(bpm);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bpm]);
 
   useEffect(() => {
     return () => {
