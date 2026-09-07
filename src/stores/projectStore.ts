@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { Project, Track } from '../types';
 
 interface ProjectStore {
@@ -70,60 +71,75 @@ const createDefaultProject = (): Project => ({
   updatedAt: new Date().toISOString()
 });
 
-export const useProjectStore = create<ProjectStore>((set) => ({
-  currentProject: createDefaultProject(),
-  isPlaying: false,
-  currentStep: 0,
-  
-  setProject: (project) => set({ currentProject: project }),
-  
-  togglePlay: () => set((state) => ({ isPlaying: !state.isPlaying })),
+const touch = (project: Project): Project => ({
+  ...project,
+  updatedAt: new Date().toISOString()
+});
 
-  stop: () => set({ isPlaying: false, currentStep: 0 }),
+export const useProjectStore = create<ProjectStore>()(
+  persist(
+    (set) => ({
+      currentProject: createDefaultProject(),
+      isPlaying: false,
+      currentStep: 0,
 
-  setCurrentStep: (step) => set({ currentStep: step }),
-  
-  updateTrack: (trackId, updates) => set((state) => ({
-    currentProject: state.currentProject ? {
-      ...state.currentProject,
-      tracks: state.currentProject.tracks.map(track =>
-        track.id === trackId ? { ...track, ...updates } : track
-      )
-    } : null
-  })),
-  
-  toggleStep: (trackId, rowIndex, stepIndex) => set((state) => ({
-    currentProject: state.currentProject ? {
-      ...state.currentProject,
-      tracks: state.currentProject.tracks.map(track => {
-        if (track.id === trackId) {
-          const newPattern = [...track.pattern];
-          newPattern[rowIndex] = [...newPattern[rowIndex]];
-          newPattern[rowIndex][stepIndex] = !newPattern[rowIndex][stepIndex];
-          return { ...track, pattern: newPattern };
-        }
-        return track;
+      setProject: (project) => set({ currentProject: project }),
+
+      togglePlay: () => set((state) => ({ isPlaying: !state.isPlaying })),
+
+      stop: () => set({ isPlaying: false, currentStep: 0 }),
+
+      setCurrentStep: (step) => set({ currentStep: step }),
+
+      updateTrack: (trackId, updates) => set((state) => ({
+        currentProject: state.currentProject ? touch({
+          ...state.currentProject,
+          tracks: state.currentProject.tracks.map(track =>
+            track.id === trackId ? { ...track, ...updates } : track
+          )
+        }) : null
+      })),
+
+      toggleStep: (trackId, rowIndex, stepIndex) => set((state) => ({
+        currentProject: state.currentProject ? touch({
+          ...state.currentProject,
+          tracks: state.currentProject.tracks.map(track => {
+            if (track.id === trackId) {
+              const newPattern = [...track.pattern];
+              newPattern[rowIndex] = [...newPattern[rowIndex]];
+              newPattern[rowIndex][stepIndex] = !newPattern[rowIndex][stepIndex];
+              return { ...track, pattern: newPattern };
+            }
+            return track;
+          })
+        }) : null
+      })),
+
+      addTrack: (track) => set((state) => ({
+        currentProject: state.currentProject ? touch({
+          ...state.currentProject,
+          tracks: [...state.currentProject.tracks, track]
+        }) : null
+      })),
+
+      deleteTrack: (trackId) => set((state) => ({
+        currentProject: state.currentProject ? touch({
+          ...state.currentProject,
+          tracks: state.currentProject.tracks.filter(t => t.id !== trackId)
+        }) : null
+      })),
+
+      setBPM: (bpm) => set((state) => {
+        if (!state.currentProject || !Number.isFinite(bpm)) return {};
+        const clamped = Math.min(200, Math.max(60, Math.round(bpm)));
+        return { currentProject: touch({ ...state.currentProject, bpm: clamped }) };
       })
-    } : null
-  })),
-  
-  addTrack: (track) => set((state) => ({
-    currentProject: state.currentProject ? {
-      ...state.currentProject,
-      tracks: [...state.currentProject.tracks, track]
-    } : null
-  })),
-  
-  deleteTrack: (trackId) => set((state) => ({
-    currentProject: state.currentProject ? {
-      ...state.currentProject,
-      tracks: state.currentProject.tracks.filter(t => t.id !== trackId)
-    } : null
-  })),
-  
-  setBPM: (bpm) => set((state) => {
-    if (!state.currentProject || !Number.isFinite(bpm)) return {};
-    const clamped = Math.min(200, Math.max(60, Math.round(bpm)));
-    return { currentProject: { ...state.currentProject, bpm: clamped } };
-  })
-}));
+    }),
+    {
+      name: 'beataddicts.project',
+      // Only persist the project itself — isPlaying/currentStep are
+      // transient playback state that shouldn't resume on page load.
+      partialize: (state) => ({ currentProject: state.currentProject })
+    }
+  )
+);
