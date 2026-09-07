@@ -221,12 +221,33 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
       `PluginCategoryConfig` used in return type, never imported.
       *(Fixed 2026-09-07 — added the missing import. Typecheck confirms the
       error is gone; 3 unrelated pre-existing errors elsewhere untouched.)*
-- [ ] **F11 — No error handling around audio decode** (`src/audio/sampleManager.ts:26-42`)
+- [x] **F11 — No error handling around audio decode** (`src/audio/sampleManager.ts:26-42`)
       Corrupt/oversized/unsupported sample file throws unhandled promise
       rejection; no size cap; no cleanup of old buffers (memory leak risk).
-- [ ] **F12 — Dead/no-op UI controls** (multiple files)
+      *(Fixed 2026-09-07 — note: the one current caller (`Sequencer.tsx`'s
+      `handleSampleFiles`) already wraps `loadAudioFile` in try/catch, so
+      this wasn't actually unhandled in practice today; hardened the
+      utility itself anyway since other future callers might not wrap it.
+      Added a 50MB file-size cap (checked before reading/decoding) and
+      normalized `decodeAudioData`'s reject callback to always produce a
+      real `Error` with a usable message, since some browsers can reject
+      with a bare/undefined value. Re: "memory leak" — `removeSample`
+      already exists and drops the array reference, which is sufficient
+      for GC to reclaim an `AudioBuffer` (no manual dispose API exists for
+      it); the real risk was only the missing size cap, now addressed.)*
+- [x] **F12 — Dead/no-op UI controls** (multiple files)
       Header's Open/Save/Settings, Sidebar's Settings, PulseAssistant's
       Tips/Learn/Trends, App.tsx's "Upgrade to Pro" — all look clickable, do nothing.
+      *(Fixed 2026-09-07 — Header's Open/Save/Settings, Sidebar's Settings,
+      and App.tsx's "Upgrade to Pro" are now `disabled` with a "coming
+      soon" tooltip instead of silently doing nothing (these imply real
+      project I/O / settings / billing work that's out of scope here).
+      PulseAssistant's Tips/Learn/Trends were simple enough to actually
+      wire up instead of just disabling — they now send a real preset
+      prompt through the existing chat flow. Verified in-browser: buttons
+      render visibly dimmed, clicking Trends sent its prompt and got the
+      expected response (fallback message, since no AI key is configured
+      on this VM).)*
 - [x] **F13 — Mixer "Save Snapshot" doesn't persist anything** (`src/components/features/Mixer.tsx:83-88`)
       Just shows a toast; no data stored, no way to recall.
       *(Fixed 2026-09-07 — added real `saveSnapshot`/`loadSnapshot`/

@@ -57,7 +57,9 @@ export const Header = () => {
         <Button
           variant="outline"
           size="sm"
-          className="border-studio-border hover:border-neon-purple hover:bg-neon-purple/10"
+          disabled
+          title="Coming soon — project loading isn't implemented yet"
+          className="border-studio-border hover:border-neon-purple hover:bg-neon-purple/10 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <FolderOpen className="w-4 h-4 mr-2" />
           Open
@@ -65,7 +67,9 @@ export const Header = () => {
         <Button
           variant="outline"
           size="sm"
-          className="border-studio-border hover:border-neon-purple hover:bg-neon-purple/10"
+          disabled
+          title="Coming soon — project saving isn't implemented yet"
+          className="border-studio-border hover:border-neon-purple hover:bg-neon-purple/10 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Save className="w-4 h-4 mr-2" />
           Save
@@ -73,7 +77,9 @@ export const Header = () => {
         <Button
           variant="outline"
           size="icon"
-          className="border-studio-border hover:border-neon-purple hover:bg-neon-purple/10"
+          disabled
+          title="Coming soon — settings aren't implemented yet"
+          className="border-studio-border hover:border-neon-purple hover:bg-neon-purple/10 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Settings className="w-4 h-4" />
         </Button>

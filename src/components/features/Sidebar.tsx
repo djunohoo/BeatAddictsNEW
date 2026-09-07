@@ -48,8 +48,14 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
 
       <div className="flex-1" />
 
-      <button className="w-14 h-14 rounded-xl bg-studio-panel hover:bg-studio-surface flex items-center justify-center transition-all group">
-        <Settings className="w-6 h-6 text-muted-foreground group-hover:text-foreground" />
+      <button
+        disabled
+        className="relative w-14 h-14 rounded-xl bg-studio-panel opacity-50 cursor-not-allowed flex items-center justify-center transition-all group"
+      >
+        <Settings className="w-6 h-6 text-muted-foreground" />
+        <div className="absolute left-full ml-4 px-3 py-2 bg-studio-surface border border-studio-border rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+          <span className="text-sm font-medium">Coming soon</span>
+        </div>
       </button>
     </aside>
   );

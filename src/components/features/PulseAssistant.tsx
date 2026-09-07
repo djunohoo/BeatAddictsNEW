@@ -18,10 +18,10 @@ export const PulseAssistant = () => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
-    
-    const userMessage = input;
+  const handleSend = async (overrideMessage?: string) => {
+    const userMessage = overrideMessage ?? input;
+    if (!userMessage.trim() || isLoading) return;
+
     addMessage(userMessage, 'user');
     setInput('');
     setIsLoading(true);
@@ -83,15 +83,27 @@ export const PulseAssistant = () => {
       {/* Quick Actions */}
       <div className="p-4 border-b border-studio-border">
         <div className="grid grid-cols-3 gap-2">
-          <button className="flex flex-col items-center gap-1 p-3 rounded-lg bg-studio-panel hover:bg-neon-purple/10 border border-studio-border hover:border-neon-purple transition-all">
+          <button
+            onClick={() => handleSend('Give me a quick production tip for what I\'m working on right now.')}
+            disabled={isLoading}
+            className="flex flex-col items-center gap-1 p-3 rounded-lg bg-studio-panel hover:bg-neon-purple/10 border border-studio-border hover:border-neon-purple transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <Sparkles className="w-5 h-5 text-neon-purple" />
             <span className="text-xs">Tips</span>
           </button>
-          <button className="flex flex-col items-center gap-1 p-3 rounded-lg bg-studio-panel hover:bg-neon-cyan/10 border border-studio-border hover:border-neon-cyan transition-all">
+          <button
+            onClick={() => handleSend('Teach me something about music production I might not know.')}
+            disabled={isLoading}
+            className="flex flex-col items-center gap-1 p-3 rounded-lg bg-studio-panel hover:bg-neon-cyan/10 border border-studio-border hover:border-neon-cyan transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <BookOpen className="w-5 h-5 text-neon-cyan" />
             <span className="text-xs">Learn</span>
           </button>
-          <button className="flex flex-col items-center gap-1 p-3 rounded-lg bg-studio-panel hover:bg-neon-pink/10 border border-studio-border hover:border-neon-pink transition-all">
+          <button
+            onClick={() => handleSend('What genres or production trends are popular right now?')}
+            disabled={isLoading}
+            className="flex flex-col items-center gap-1 p-3 rounded-lg bg-studio-panel hover:bg-neon-pink/10 border border-studio-border hover:border-neon-pink transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <TrendingUp className="w-5 h-5 text-neon-pink" />
             <span className="text-xs">Trends</span>
           </button>
@@ -146,7 +158,7 @@ export const PulseAssistant = () => {
             className="flex-1 bg-studio-panel border border-studio-border rounded-lg px-4 py-2 focus:outline-none focus:border-neon-purple text-sm"
           />
           <Button
-            onClick={handleSend}
+            onClick={() => handleSend()}
             size="icon"
             disabled={isLoading || !input.trim()}
             className="bg-gradient-to-r from-neon-purple to-neon-cyan hover:shadow-lg hover:shadow-neon-purple/50 disabled:opacity-50"

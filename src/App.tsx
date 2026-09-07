@@ -43,7 +43,11 @@ function App() {
               <p className="text-muted-foreground mb-4">
                 Premium feature - Create custom vocals with AI voice cloning technology
               </p>
-              <button className="px-6 py-3 bg-gradient-to-r from-neon-pink to-neon-purple rounded-lg font-semibold hover:shadow-xl transition-all">
+              <button
+                disabled
+                title="Coming soon — billing isn't set up yet"
+                className="px-6 py-3 bg-gradient-to-r from-neon-pink to-neon-purple rounded-lg font-semibold hover:shadow-xl transition-all opacity-50 cursor-not-allowed"
+              >
                 Upgrade to Pro
               </button>
             </div>
