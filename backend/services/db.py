@@ -1,5 +1,6 @@
+import logging
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 try:
     from supabase import create_client, Client
@@ -7,6 +8,7 @@ except Exception:
     create_client = None
     Client = None
 
+logger = logging.getLogger("beataddicts.db")
 
 _client = None
 
@@ -23,43 +25,69 @@ def _get_client():
     return _client
 
 
-def log_generation(req, kind: str, payload: Dict[str, Any]):
+def _insert(table: str, record: Dict[str, Any]) -> None:
     client = _get_client()
     if client is None:
         return
-    record = {
-        "user_id": req.user_id,
-        "kind": kind,
-        "genre": req.genre,
-        "payload": payload,
-        "opt_in": req.opt_in,
-    }
-    client.table("ai_generations").insert(record).execute()
+    try:
+        client.table(table).insert(record).execute()
+    except Exception:
+        # Persistence is best-effort: a DB/schema hiccup shouldn't turn an
+        # already-computed result into a 500 for the caller.
+        logger.exception("Failed to insert into %s", table)
+
+
+def log_generation(req, kind: str, payload: Dict[str, Any]):
+    _insert(
+        "ai_generations",
+        {
+            "user_id": req.user_id,
+            "kind": kind,
+            "genre": req.genre,
+            "payload": payload,
+            "opt_in": req.opt_in,
+        },
+    )
 
 
 def store_feedback(user_id: str, accepted: bool, pattern: Dict[str, Any], genre: str):
-    client = _get_client()
-    if client is None:
-        return
-    client.table("ai_feedback").insert(
+    _insert(
+        "ai_feedback",
         {
             "user_id": user_id,
             "accepted": accepted,
             "pattern": pattern,
             "genre": genre,
-        }
-    ).execute()
+        },
+    )
 
 
 def store_midi(user_id: str, midi_url: str):
-    client = _get_client()
-    if client is None:
-        return
-    client.table("midi_files").insert({"user_id": user_id, "midi_url": midi_url}).execute()
+    _insert("midi_files", {"user_id": user_id, "midi_url": midi_url})
 
 
 def enqueue_training_batch(user_id: str, batch_id: str):
+    _insert("training_batches", {"user_id": user_id, "batch_id": batch_id})
+
+
+def count_recent_generations(user_id: str, since_iso: str) -> Optional[int]:
+    """Count ai_generations rows for user_id at/after since_iso.
+
+    Returns None if Supabase isn't configured or the query fails, so callers
+    can fail open instead of blocking generation on an infra hiccup.
+    """
     client = _get_client()
     if client is None:
-        return
-    client.table("training_batches").insert({"user_id": user_id, "batch_id": batch_id}).execute()
+        return None
+    try:
+        result = (
+            client.table("ai_generations")
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .gte("created_at", since_iso)
+            .execute()
+        )
+        return result.count
+    except Exception:
+        logger.exception("Failed to count recent generations for user_id=%s", user_id)
+        return None

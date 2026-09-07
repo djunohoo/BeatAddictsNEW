@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -12,13 +14,19 @@ from models.inference import (
 )
 from services.legal import enforce_phase0
 from services.db import log_generation, store_feedback, store_midi, enqueue_training_batch
+from services.pulse import get_pulse_reply, PulseUnavailable
 
 app = FastAPI(title="Beat Addicts AI Engine", version="0.1.0")
 
+# CORS_ALLOWED_ORIGINS: comma-separated list, e.g. "https://beataddicts.app,http://localhost:5000".
+# Defaults to "*" for local/LAN dev. allow_credentials is left off since this
+# API has no cookie/session-based auth — allow_origins="*" + allow_credentials=True
+# is invalid per the CORS spec and was previously set here without reason.
+_allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "*")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[o.strip() for o in _allowed_origins.split(",")],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -88,8 +96,11 @@ class PulseRequest(BaseModel):
 
 @app.post("/pulse/chat")
 def pulse_chat(req: PulseRequest):
-    # Placeholder so frontend can route all AI traffic through the same backend.
-    return {"reply": "Pulse is online. AI backend connected."}
+    try:
+        reply = get_pulse_reply(req.message, req.conversationHistory)
+    except PulseUnavailable as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {"reply": reply}
 
 
 class FeedbackRequest(BaseModel):
