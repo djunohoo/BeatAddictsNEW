@@ -7,6 +7,7 @@ interface ProjectStore {
   currentStep: number;
   setProject: (project: Project) => void;
   togglePlay: () => void;
+  stop: () => void;
   setCurrentStep: (step: number) => void;
   updateTrack: (trackId: string, updates: Partial<Track>) => void;
   toggleStep: (trackId: string, rowIndex: number, stepIndex: number) => void;
@@ -77,7 +78,9 @@ export const useProjectStore = create<ProjectStore>((set) => ({
   setProject: (project) => set({ currentProject: project }),
   
   togglePlay: () => set((state) => ({ isPlaying: !state.isPlaying })),
-  
+
+  stop: () => set({ isPlaying: false, currentStep: 0 }),
+
   setCurrentStep: (step) => set({ currentStep: step }),
   
   updateTrack: (trackId, updates) => set((state) => ({
@@ -118,10 +121,9 @@ export const useProjectStore = create<ProjectStore>((set) => ({
     } : null
   })),
   
-  setBPM: (bpm) => set((state) => ({
-    currentProject: state.currentProject ? {
-      ...state.currentProject,
-      bpm
-    } : null
-  }))
+  setBPM: (bpm) => set((state) => {
+    if (!state.currentProject || !Number.isFinite(bpm)) return {};
+    const clamped = Math.min(200, Math.max(60, Math.round(bpm)));
+    return { currentProject: { ...state.currentProject, bpm: clamped } };
+  })
 }));

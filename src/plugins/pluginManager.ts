@@ -1,6 +1,7 @@
 import type {
   PluginAutomationBinding,
   PluginBridgePayload,
+  PluginCategoryConfig,
   PluginCategoryId,
   PluginChainItem,
   PluginHostSupport,

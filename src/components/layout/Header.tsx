@@ -4,7 +4,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { usePulseStore } from '../../stores/pulseStore';
 
 export const Header = () => {
-  const { currentProject, isPlaying, togglePlay, setBPM } = useProjectStore();
+  const { currentProject, isPlaying, togglePlay, stop, setBPM } = useProjectStore();
   const { togglePulse } = usePulseStore();
 
   return (
@@ -33,9 +33,7 @@ export const Header = () => {
         <Button
           variant="outline"
           size="icon"
-          onClick={() => {
-            useProjectStore.setState({ isPlaying: false, currentStep: 0 });
-          }}
+          onClick={stop}
           className="border-studio-border hover:border-neon-purple hover:bg-neon-purple/10"
         >
           <Square className="w-4 h-4" />
