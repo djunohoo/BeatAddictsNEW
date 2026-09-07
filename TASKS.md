@@ -168,9 +168,20 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 - [x] **F1 — Duplicate `saveToLibrary` declaration** (`src/components/features/Sequencer.tsx`)
       Broke esbuild dependency scan, blocked dev server from starting entirely.
       *(Fixed 2026-09-07 — removed dead duplicate at former line 646.)*
-- [ ] **F2 — Frontend silently fakes AI results on any backend failure** (`src/ai/AIWorkflow.js:66-141`)
+- [x] **F2 — Frontend silently fakes AI results on any backend failure** (`src/ai/AIWorkflow.js:66-141`)
       Bare `catch {}` on every fetch failure substitutes `Math.random()` patterns
       or canned text, no user-facing indication generation failed.
+      *(Fixed 2026-09-07, per product decision: toast warning + badge. Every
+      `AIWorkflow` generator now returns an `isFallback` flag. Wired into both
+      call sites: `AIStudio.tsx` shows a destructive toast per stage
+      ("&lt;Stage&gt; generated offline") and tags the stage row with a small
+      amber "Offline" badge (tooltip explains why); `Sequencer.tsx`'s
+      "Generate AI Beat" button shows the same kind of toast instead of
+      always claiming "AI Beat Generated!" regardless of what actually
+      happened. Verified in-browser: stopped the FastAPI backend, generated
+      a beat, confirmed the "Beat generated offline" toast fired with the
+      honest description; restarted the backend, generated again, confirmed
+      the request returned 200 (real path) this time.)*
 - [x] **F3 — Playback ignores live pattern/BPM edits** (`src/components/features/Sequencer.tsx:564-594`)
       Stale closure in `setInterval` over `pattern`/`bpm` at Play time.
       *(Fixed 2026-09-07 — added a `patternRef` kept in sync during render so

@@ -746,10 +746,18 @@ export const Sequencer = () => {
         setBpm(result.bpm);
       }
 
-      toast({
-        title: 'AI Beat Generated!',
-        description: `${selectedGenre} pattern created with ${complexity}% complexity`
-      });
+      if (result.isFallback) {
+        toast({
+          title: 'Beat generated offline',
+          description: 'The AI backend was unreachable, so this is a local placeholder pattern, not real AI output.',
+          variant: 'destructive'
+        });
+      } else {
+        toast({
+          title: 'AI Beat Generated!',
+          description: `${selectedGenre} pattern created with ${complexity}% complexity`
+        });
+      }
     } catch (error: any) {
       console.error('AI beat generation error:', error);
       toast({
