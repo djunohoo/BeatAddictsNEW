@@ -9,6 +9,14 @@ Deno.serve(async (req) => {
   try {
     const { genre, mood, stage } = await req.json();
 
+    const isNonEmptyString = (v: unknown) => typeof v === 'string' && v.trim().length > 0 && v.length <= 200;
+    if (!isNonEmptyString(genre) || !isNonEmptyString(mood) || !isNonEmptyString(stage)) {
+      return new Response(
+        JSON.stringify({ error: 'genre, mood, and stage are required strings (max 200 chars each)' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const baseUrl = Deno.env.get('ONSPACE_AI_BASE_URL');
     const apiKey = Deno.env.get('ONSPACE_AI_API_KEY');
 
@@ -56,7 +64,14 @@ Deno.serve(async (req) => {
     }
 
     const data = await response.json();
-    const generatedContent = data.choices[0].message.content;
+    const generatedContent = data?.choices?.[0]?.message?.content;
+    if (typeof generatedContent !== 'string') {
+      console.error('Generate Music: unexpected upstream response shape', data);
+      return new Response(
+        JSON.stringify({ error: 'AI service returned no content' }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Parse the response to extract pattern data (simplified for demo)
     const result = {

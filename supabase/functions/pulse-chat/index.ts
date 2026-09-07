@@ -9,6 +9,25 @@ Deno.serve(async (req) => {
   try {
     const { message, conversationHistory } = await req.json();
 
+    if (typeof message !== 'string' || message.trim().length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'message is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (message.length > 4000) {
+      return new Response(
+        JSON.stringify({ error: 'message is too long (max 4000 characters)' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (conversationHistory !== undefined && conversationHistory !== null && !Array.isArray(conversationHistory)) {
+      return new Response(
+        JSON.stringify({ error: 'conversationHistory must be an array' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const baseUrl = Deno.env.get('ONSPACE_AI_BASE_URL');
     const apiKey = Deno.env.get('ONSPACE_AI_API_KEY');
 
@@ -58,7 +77,14 @@ Keep responses concise (2-3 sentences), friendly, and actionable. Use music prod
     }
 
     const data = await response.json();
-    const reply = data.choices[0].message.content;
+    const reply = data?.choices?.[0]?.message?.content;
+    if (typeof reply !== 'string') {
+      console.error('Pulse Chat: unexpected upstream response shape', data);
+      return new Response(
+        JSON.stringify({ error: 'AI service returned no content' }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     return new Response(JSON.stringify({ reply }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
