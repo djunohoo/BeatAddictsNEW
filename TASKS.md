@@ -133,7 +133,12 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
       out of scope for a quick fix. **Also note: these edge function changes
       are only in the repo — they need `supabase functions deploy` to
       actually take effect, which I haven't run since it touches the live
-      Supabase project.***
+      Supabase project.** *(2026-09-07 — checked: I don't actually have
+      deploy access to wherever this runs. The project's real backend
+      (`nzlodtgybdfhnmssnzlo.backend.onspace.ai` per `.env`) isn't standard
+      Supabase — it's a different platform ("OnSpace"), and none of the
+      Supabase projects my tools can see match it. Someone with access to
+      that OnSpace/Supabase project needs to run the deploy.)*
 - [x] **B13 — Unchecked AI response shape in edge functions**
       (`supabase/functions/generate-music/index.ts:59`, `pulse-chat/index.ts:61`)
       `data.choices[0].message.content` assumes well-formed response; throws
@@ -197,6 +202,16 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
       Says "8 tracks", only 7 `INSTRUMENTS` exist.
 - [ ] **F15 — Multi-file sample upload only surfaces last error** (`src/components/features/Sequencer.tsx:136-179`)
       `errorMessage` overwritten per failed file in a loop.
+
+- [x] **B16 — `uv.lock` stale relative to `pyproject.toml`** (repo root)
+      Adding `httpx` as a direct dependency to `pyproject.toml` (for B7's real
+      `/pulse/chat`) left `uv.lock` only knowing about it transitively (via
+      `supabase`'s own deps), not as a direct project dependency. If Replit's
+      `uv sync` runs in a strict/frozen mode, an out-of-date lock can fail
+      the build. *(Fixed 2026-09-07 — installed `uv`, ran `uv lock` to
+      regenerate properly; clean 2-line diff adding `httpx` to the root
+      package's direct `dependencies` list. Verified backend still boots
+      after.)*
 
 ## Infra / environment (log of what's already been done)
 
