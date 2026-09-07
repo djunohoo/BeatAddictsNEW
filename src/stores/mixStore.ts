@@ -36,7 +36,20 @@ interface MixStore {
   setHeadphones: (v: boolean) => void;
   reset: () => void;
   randomize: () => void;
+  saveSnapshot: () => void;
+  loadSnapshot: () => boolean;
+  hasSnapshot: () => boolean;
 }
+
+const SNAPSHOT_KEY = 'beataddicts.mixer.snapshot';
+
+type MixSnapshot = {
+  masterVolume: number;
+  stereoWidth: number;
+  limiter: boolean;
+  headphones: boolean;
+  tracks: Record<TrackId, MixStrip>;
+};
 
 const defaultStrip = (): MixStrip => ({
   volume: 75,
@@ -102,5 +115,33 @@ export const useMixStore = create<MixStore>((set, get) => ({
         };
       });
       return { tracks: next };
-    })
+    }),
+  saveSnapshot: () => {
+    const { masterVolume, stereoWidth, limiter, headphones, tracks } = get();
+    const snapshot: MixSnapshot = { masterVolume, stereoWidth, limiter, headphones, tracks };
+    try {
+      localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshot));
+    } catch {
+      // localStorage unavailable (private browsing, storage full, etc.) —
+      // caller surfaces this via hasSnapshot()/loadSnapshot() returning false.
+    }
+  },
+  loadSnapshot: () => {
+    try {
+      const raw = localStorage.getItem(SNAPSHOT_KEY);
+      if (!raw) return false;
+      const snapshot: MixSnapshot = JSON.parse(raw);
+      set(snapshot);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  hasSnapshot: () => {
+    try {
+      return localStorage.getItem(SNAPSHOT_KEY) !== null;
+    } catch {
+      return false;
+    }
+  }
 }));

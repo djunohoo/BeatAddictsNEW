@@ -27,11 +27,16 @@ export const PulseAssistant = () => {
     setIsLoading(true);
     
     try {
-      // Prepare conversation history
-      const conversationHistory = messages.map(msg => ({
-        role: msg.type === 'user' ? 'user' : 'assistant',
-        content: msg.content
-      }));
+      // Prepare conversation history, including the message just sent (the
+      // `messages` store snapshot above was captured before addMessage
+      // updated it, so it wouldn't otherwise include this turn).
+      const conversationHistory = [
+        ...messages.map(msg => ({
+          role: msg.type === 'user' ? 'user' : 'assistant',
+          content: msg.content
+        })),
+        { role: 'user', content: userMessage }
+      ];
 
       const data = await AIClient.pulseChat({
         message: userMessage,
