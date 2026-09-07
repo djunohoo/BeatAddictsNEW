@@ -643,10 +643,6 @@ export const Sequencer = () => {
     });
   };
 
-  const saveToLibrary = () => {
-    savePattern();
-  };
-
   const randomizePreset = () => {
     const randomGenre = genreOptions[Math.floor(Math.random() * genreOptions.length)];
     const randomComplexity = Math.floor(Math.random() * 100);
