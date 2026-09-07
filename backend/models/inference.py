@@ -1,14 +1,18 @@
+import logging
 import random
 import json
 import os
 from typing import Dict, Any
+
+logger = logging.getLogger("beataddicts.inference")
 
 # Load patterns from JSON file
 PATTERNS_FILE = os.path.join(os.path.dirname(__file__), 'patterns.json')
 try:
     with open(PATTERNS_FILE, 'r') as f:
         DRUM_PATTERNS = json.load(f)
-except:
+except (OSError, json.JSONDecodeError):
+    logger.exception("Failed to load drum patterns from %s; falling back to random generation for all requests", PATTERNS_FILE)
     DRUM_PATTERNS = {}
 
 
