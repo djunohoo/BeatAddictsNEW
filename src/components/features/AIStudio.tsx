@@ -24,6 +24,7 @@ export const AIStudio = () => {
   const [currentStage, setCurrentStage] = useState(0);
   const [generatedContent, setGeneratedContent] = useState<Record<string, string>>({});
   const [completedStages, setCompletedStages] = useState<Set<number>>(new Set());
+  const [fallbackStages, setFallbackStages] = useState<Set<number>>(new Set());
 
   const genres = ['Electronic', 'Hip Hop', 'House', 'Trap', 'Lo-Fi', 'Ambient'];
   const moods = ['Energetic', 'Chill', 'Dark', 'Uplifting', 'Minimal', 'Epic'];
@@ -57,6 +58,15 @@ export const AIStudio = () => {
 
       setCompletedStages(prev => new Set([...prev, stageIndex]));
 
+      if (data?.isFallback) {
+        setFallbackStages(prev => new Set([...prev, stageIndex]));
+        toast({
+          title: `${stage.name} generated offline`,
+          description: 'The AI backend was unreachable, so this is a local placeholder sketch, not real AI output.',
+          variant: 'destructive'
+        });
+      }
+
       return true;
     } catch (error: any) {
       console.error(`Stage ${stage.name} generation error:`, error);
@@ -73,6 +83,7 @@ export const AIStudio = () => {
     setIsGenerating(true);
     setCurrentStage(0);
     setCompletedStages(new Set());
+    setFallbackStages(new Set());
     setGeneratedContent({});
 
     // Generate each stage sequentially
@@ -183,6 +194,7 @@ export const AIStudio = () => {
           {stages.map((stage, index) => {
             const isActive = index === currentStage && isGenerating;
             const isCompleted = completedStages.has(index);
+            const isFallback = fallbackStages.has(index);
             const hasContent = generatedContent[stage.name];
 
             return (
@@ -212,7 +224,17 @@ export const AIStudio = () => {
                     )}
                   </div>
                   <div className="flex-1">
-                    <div className="font-semibold">{stage.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{stage.name}</span>
+                      {isFallback && (
+                        <span
+                          title="The AI backend was unreachable — this is a local placeholder, not real AI output"
+                          className="text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                        >
+                          Offline
+                        </span>
+                      )}
+                    </div>
                     <div className="text-sm text-muted-foreground">{stage.description}</div>
                   </div>
                   {isActive && (

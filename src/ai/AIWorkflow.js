@@ -66,75 +66,90 @@ const tryGenerateRemote = async (apiCall, params) => {
 export const AIWorkflow = {
   async generateDrums(params) {
     let data;
+    let isFallback = false;
     try {
       data = await tryGenerateRemote(AIClient.generateDrums, params);
     } catch {
       data = buildLocalPattern(params);
+      isFallback = true;
     }
 
     const result = PatternAdapter.toSequencerPattern(data);
     const pluginChain = PluginManager.buildPluginChain('Beat Pattern', params, params.host || 'Ableton');
     return {
       ...result,
+      isFallback,
       pluginChain,
       bridgePayload: PluginManager.buildBridgePayload(params.host || 'Ableton', pluginChain)
     };
   },
   async generateLocalDrums(params) {
-    return buildLocalPattern(params);
+    return { ...buildLocalPattern(params), isFallback: true };
   },
   async generateBassline(params) {
     let data;
+    let isFallback = false;
     try {
       data = await tryGenerateRemote(AIClient.generateBassline, params);
     } catch {
       data = { message: `Local bassline sketch for ${params.genre || 'any genre'} in ${params.mood || 'balanced'} mood.` };
+      isFallback = true;
     }
     const pluginChain = PluginManager.buildPluginChain('Bassline', params, params.host || 'Ableton');
     return {
       data,
+      isFallback,
       pluginChain,
       bridgePayload: PluginManager.buildBridgePayload(params.host || 'Ableton', pluginChain)
     };
   },
   async generateMelody(params) {
     let data;
+    let isFallback = false;
     try {
       data = await tryGenerateRemote(AIClient.generateMelody, params);
     } catch {
       data = { message: `Local melody sketch for ${params.genre || 'any genre'} in ${params.mood || 'balanced'} mood.` };
+      isFallback = true;
     }
     const pluginChain = PluginManager.buildPluginChain('Melody', params, params.host || 'Ableton');
     return {
       data,
+      isFallback,
       pluginChain,
       bridgePayload: PluginManager.buildBridgePayload(params.host || 'Ableton', pluginChain)
     };
   },
   async generateChords(params) {
     let data;
+    let isFallback = false;
     try {
       data = await tryGenerateRemote(AIClient.generateChords, params);
     } catch {
       data = { message: `Local chord progression sketch for ${params.genre || 'any genre'} in ${params.mood || 'balanced'} mood.` };
+      isFallback = true;
     }
     const pluginChain = PluginManager.buildPluginChain('Chords', params, params.host || 'Ableton');
     return {
       data,
+      isFallback,
       pluginChain,
       bridgePayload: PluginManager.buildBridgePayload(params.host || 'Ableton', pluginChain)
     };
   },
   async generateArrangement(params) {
     let data;
+    let isFallback = false;
     try {
       data = await tryGenerateRemote(AIClient.generateArrangement, params);
     } catch {
       data = { message: `Local arrangement outline for ${params.genre || 'any genre'} in ${params.mood || 'balanced'} mood.` };
+      isFallback = true;
     }
     const pluginChain = PluginManager.buildPluginChain('Arrangement', params, params.host || 'Ableton');
     return {
       data,
+      isFallback,
       pluginChain,
       bridgePayload: PluginManager.buildBridgePayload(params.host || 'Ableton', pluginChain)
     };
