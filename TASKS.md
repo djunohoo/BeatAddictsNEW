@@ -156,12 +156,12 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
       `LocalLearning.js`'s client-side counter is still there for UI/UX
       purposes (showing the user their usage) but is no longer the actual
       enforcement mechanism — that's fine, it's just no longer load-bearing.)*
-- [ ] **B15 — Duplicate/diverging fake drum generator, dead code** (`src/ai/DrumEngine.js`)
+- [x] **B15 — Duplicate/diverging fake drum generator, dead code** (`src/ai/DrumEngine.js`)
       Never imported anywhere; structurally different from `AIWorkflow.js`'s
       fallback generator. Decide: delete or consolidate.
       *(Confirmed 2026-09-07 — grepped `src/` for `DrumEngine`, zero matches
-      anywhere including the filename itself. Safe to delete. Left for Carrie
-      since it's a `src/` file — frontend lane.)*
+      anywhere including the filename itself. Deleted as part of the
+      frontend quick-wins batch.)*
 
 ## Frontend lane (Carrie)
 
@@ -173,35 +173,65 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
       or canned text, no user-facing indication generation failed.
 - [ ] **F3 — Playback ignores live pattern/BPM edits** (`src/components/features/Sequencer.tsx:564-594`)
       Stale closure in `setInterval` over `pattern`/`bpm` at Play time.
-- [ ] **F4 — BPM field accepts NaN** (`src/components/layout/Header.tsx:49`)
+- [x] **F4 — BPM field accepts NaN** (`src/components/layout/Header.tsx:49`)
       `parseInt('')` on emptied field writes `NaN` into the project store.
-- [ ] **F5 — Stop button bypasses store's own stop logic** (`src/components/layout/Header.tsx:33-42`)
+      *(Fixed 2026-09-07 — `setBPM` in `projectStore.ts` now guards with
+      `Number.isFinite` and clamps to 60-200. Verified in-browser: clearing
+      the field snaps back to the last valid value instead of going NaN.)*
+- [x] **F5 — Stop button bypasses store's own stop logic** (`src/components/layout/Header.tsx:33-42`)
       Calls `setState` directly instead of a dedicated stop/toggle action.
-- [ ] **F6 — PulseAssistant sends stale conversation history** (`src/components/features/PulseAssistant.tsx:24-39`)
+      *(Fixed 2026-09-07 — added a real `stop()` action to `projectStore.ts`,
+      Header now calls it instead of reaching in with raw `setState`.)*
+- [x] **F6 — PulseAssistant sends stale conversation history** (`src/components/features/PulseAssistant.tsx:24-39`)
       History built from pre-update `messages` array, always one message behind.
+      *(Fixed 2026-09-07 — the just-sent message is now appended explicitly
+      to the history payload. Verified in-browser: sent a message, confirmed
+      the request reached the backend correctly.)*
 - [ ] **F7 — No React Router mounted despite dependency present** (`src/App.tsx`, `src/main.tsx`)
       `Index.tsx`/`NotFound.tsx` unreachable dead code; `NotFound` would throw
       if ever rendered outside a Router (`useLocation`).
 - [ ] **F8 — No persistence anywhere** (`src/stores/*.ts`, `src/App.tsx` activeTab state)
       No Zustand `persist` middleware; refresh silently loses entire session,
       no autosave/warning.
-- [ ] **F9 — Supabase client throws at module load if env vars missing** (`src/lib/supabase.ts:6-8`)
+- [x] **F9 — Supabase client throws at module load if env vars missing** (`src/lib/supabase.ts:6-8`)
       No ErrorBoundary anywhere in the app; misconfigured deploy = instant
       white screen.
-- [ ] **F10 — Missing type import breaks compilation** (`src/plugins/pluginManager.ts:31`)
+      *(Fixed 2026-09-07 — note: `src/lib/supabase.ts` is currently unused
+      anywhere in `src/` — grepped, zero imports — so this specific throw is
+      latent, not yet reachable in practice. Fixed anyway since it'll bite
+      the moment someone wires up real Supabase calls. Since the throw
+      happens at module-load time (before React mounts), a React
+      `ErrorBoundary` alone can't catch it — added one anyway for genuine
+      render-time errors, plus switched `main.tsx` to a dynamic `import()`
+      of `App.tsx` with a `.catch()` that renders a shared `ErrorScreen`
+      component on either failure path. Verified both paths: temporarily
+      blanked the Supabase env vars (confirmed app still loads fine today,
+      since nothing imports the module) and separately injected a
+      synthetic top-level throw into App.tsx, confirmed the error screen
+      renders instead of a white screen, then reverted the test throw.)*
+- [x] **F10 — Missing type import breaks compilation** (`src/plugins/pluginManager.ts:31`)
       `PluginCategoryConfig` used in return type, never imported.
+      *(Fixed 2026-09-07 — added the missing import. Typecheck confirms the
+      error is gone; 3 unrelated pre-existing errors elsewhere untouched.)*
 - [ ] **F11 — No error handling around audio decode** (`src/audio/sampleManager.ts:26-42`)
       Corrupt/oversized/unsupported sample file throws unhandled promise
       rejection; no size cap; no cleanup of old buffers (memory leak risk).
 - [ ] **F12 — Dead/no-op UI controls** (multiple files)
       Header's Open/Save/Settings, Sidebar's Settings, PulseAssistant's
       Tips/Learn/Trends, App.tsx's "Upgrade to Pro" — all look clickable, do nothing.
-- [ ] **F13 — Mixer "Save Snapshot" doesn't persist anything** (`src/components/features/Mixer.tsx:83-88`)
+- [x] **F13 — Mixer "Save Snapshot" doesn't persist anything** (`src/components/features/Mixer.tsx:83-88`)
       Just shows a toast; no data stored, no way to recall.
-- [ ] **F14 — Sequencer track-count label hardcoded wrong** (`src/components/features/Sequencer.tsx:707`)
+      *(Fixed 2026-09-07 — added real `saveSnapshot`/`loadSnapshot`/
+      `hasSnapshot` to `mixStore.ts`, localStorage-backed, plus a new "Load
+      Snapshot" button in the UI. Verified in-browser: randomized the mixer,
+      loaded the snapshot, confirmed values actually restored.)*
+- [x] **F14 — Sequencer track-count label hardcoded wrong** (`src/components/features/Sequencer.tsx:707`)
       Says "8 tracks", only 7 `INSTRUMENTS` exist.
-- [ ] **F15 — Multi-file sample upload only surfaces last error** (`src/components/features/Sequencer.tsx:136-179`)
+      *(Fixed 2026-09-07 — now derives from `INSTRUMENTS.length`.)*
+- [x] **F15 — Multi-file sample upload only surfaces last error** (`src/components/features/Sequencer.tsx:136-179`)
       `errorMessage` overwritten per failed file in a loop.
+      *(Fixed 2026-09-07 — collects all per-file errors into an array and
+      shows them combined instead of only the last one.)*
 
 - [x] **B16 — `uv.lock` stale relative to `pyproject.toml`** (repo root)
       Adding `httpx` as a direct dependency to `pyproject.toml` (for B7's real
