@@ -704,7 +704,7 @@ export const Sequencer = () => {
                   <div className="w-8 h-8 bg-cyan-400 rounded"></div>
                   <div>
                     <div className="font-semibold text-white">Pattern {currentPattern}</div>
-                    <div className="text-xs text-gray-400">{getActiveNotes()} notes - 8 tracks</div>
+                    <div className="text-xs text-gray-400">{getActiveNotes()} notes - {INSTRUMENTS.length} tracks</div>
                   </div>
                 </div>
               </div>
