@@ -5,7 +5,7 @@ from fastapi import HTTPException
 
 from .db import count_recent_generations
 
-DAILY_GENERATION_LIMIT = int(os.getenv("GENERATION_DAILY_LIMIT", "20"))
+DAILY_GENERATION_LIMIT = int(os.getenv("GENERATION_DAILY_LIMIT") or "20")
 
 
 def enforce_phase0(req) -> None:

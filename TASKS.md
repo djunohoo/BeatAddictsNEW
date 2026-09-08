@@ -8,6 +8,47 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 
 ---
 
+## Real AI provider wired up (2026-09-08)
+
+Talked with Carrie directly to unblock the two "no real access/credentials"
+items from earlier:
+
+- **Real Supabase project connected.** The `onspace.ai` URL in `.env`/
+  `backend/.env` was stale/wrong — updated both to the actual project
+  (`https://lehcpkdtusqjxyevqxsx.supabase.co`) with real anon key
+  (frontend) and service-role key (backend, local `.env` only, gitignored).
+  A Postgres password was shared in chat during this — not stored or used
+  anywhere (not needed; both keys above are separate JWTs), flagged to
+  rotate it if that history isn't private enough.
+- **Real AI chat/generation provider**: not OnSpace — it's a local LAN GPU
+  broker (`blackbetty1:11434`) running Ollama, OpenAI-API-compatible, no
+  auth. `backend/services/pulse.py` now points at it via
+  `ONSPACE_AI_BASE_URL`/`ONSPACE_AI_MODEL` env vars (API key made optional
+  since the broker needs none). Currently using `llama3.2:3b` (small/fast)
+  rather than `qwen3:14b` due to broker contention at setup time — bump
+  back up once the machine has headroom.
+  - **Important: Supabase edge functions (`generate-music`, `pulse-chat`)
+    cannot reach this broker** — they run in Supabase's cloud, not on the
+    LAN. Real AI only works through the local FastAPI backend (which the
+    frontend already talks to via the `/api` proxy). The edge functions
+    remain orphaned for this purpose regardless of B11/B12's deploy status.
+- **Found and fixed while wiring this up**: `python-dotenv` was a listed
+  dependency but `load_dotenv()` was never actually called anywhere —
+  `backend/.env` had never been loaded automatically. Added the call to
+  `app/main.py`. This also exposed a latent bug: `os.getenv(KEY, default)`
+  only applies its default when `KEY` is fully unset, not when set-but-blank
+  — `backend/.env`'s empty `GENERATION_DAILY_LIMIT=`/`CORS_ALLOWED_ORIGINS=`
+  placeholders were silently breaking `int()` parsing and collapsing CORS to
+  block everything, once the file was actually being read. Fixed both to
+  `os.getenv(KEY) or default`.
+- **Verified end-to-end**: direct backend call answered correctly ("house
+  music is 118-130 BPM") in ~20s after unloading a contending 32B model
+  that had been sitting loaded on the broker (`deepseek-r1:32b`, mostly
+  CPU-offloaded — very slow). Bumped the backend's upstream timeout to 90s
+  as a safety margin for slow-but-working responses.
+
+---
+
 ## Backend lane (ours)
 
 - [x] **B1 — Bypassable "legal enforcement"** (`backend/services/legal.py:4-8`)
