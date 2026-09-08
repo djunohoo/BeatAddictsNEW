@@ -21,31 +21,35 @@ class PulseUnavailable(Exception):
     """Raised when the upstream AI chat provider can't be reached or isn't configured."""
 
 
+DEFAULT_MODEL = os.getenv("ONSPACE_AI_MODEL", "qwen3:14b")
+
+
 def get_pulse_reply(message: str, conversation_history: Optional[List[dict]]) -> str:
     base_url = os.getenv("ONSPACE_AI_BASE_URL")
     api_key = os.getenv("ONSPACE_AI_API_KEY")
 
-    if not base_url or not api_key:
+    if not base_url:
         raise PulseUnavailable("AI service not configured")
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend((conversation_history or [])[-6:])
     messages.append({"role": "user", "content": message})
 
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
     try:
         response = httpx.post(
             f"{base_url}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
+            headers=headers,
             json={
-                "model": "google/gemini-3-flash-preview",
+                "model": DEFAULT_MODEL,
                 "messages": messages,
                 "temperature": 0.8,
                 "max_tokens": 200,
             },
-            timeout=20.0,
+            timeout=90.0,
         )
         response.raise_for_status()
     except httpx.HTTPError:

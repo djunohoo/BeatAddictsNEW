@@ -1,5 +1,9 @@
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -22,7 +26,7 @@ app = FastAPI(title="Beat Addicts AI Engine", version="0.1.0")
 # Defaults to "*" for local/LAN dev. allow_credentials is left off since this
 # API has no cookie/session-based auth — allow_origins="*" + allow_credentials=True
 # is invalid per the CORS spec and was previously set here without reason.
-_allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "*")
+_allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS") or "*"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in _allowed_origins.split(",")],
