@@ -79,9 +79,26 @@ items from earlier:
       `CORS_ALLOWED_ORIGINS` env var, comma-separated, defaults to `*` for
       local/LAN dev. Verified via OPTIONS preflight: no
       `access-control-allow-credentials` header present anymore.)*
-- [ ] **B4 — Service-role Supabase key used as primary DB client** (`backend/services/db.py:19`)
+- [x] **B4 — Service-role Supabase key used as primary DB client** (`backend/services/db.py:19`)
       Bypasses Row Level Security; combined with B2/B3 = any request has full
-      table access. **Still open** — real fix needs B2 (auth) done first.
+      table access.
+      *(Resolved 2026-09-09 — turned out the real Supabase project had zero
+      tables at all (the backend's writes had been silently no-op-ing this
+      whole time, caught by the B8 fix). Created `ai_generations`,
+      `ai_feedback`, `midi_files`, `training_batches` via
+      `supabase/migrations/0001_backend_tables.sql`, RLS enabled on all four
+      with no anon/authenticated policies — since there's no real per-user
+      auth yet (B2), the honest move is to lock those roles out entirely
+      rather than write a policy that can't mean anything without a real
+      user to scope it to. `service_role` bypasses RLS regardless of
+      policies, so the backend (which only ever uses
+      `SUPABASE_SERVICE_KEY`) keeps full access with zero code change needed.
+      Verified directly: anon-key INSERT → 401 RLS violation; service-key
+      INSERT → 201. Verified through the actual backend: a real
+      `/generate/drums` call, confirmed the row landed in `ai_generations`
+      with the right payload. This also means B1's daily generation-limit
+      check is now for real enforceable — it was previously always failing
+      open since `count_recent_generations` had no table to query.)*
 - [x] **B5 — Committed `.env` with live Supabase project URL** (`.env`, repo root)
       Should be `.env.example` + gitignored (frontend anon key; separately verify
       no service keys are ever committed).
@@ -149,45 +166,36 @@ items from earlier:
       the same shape as B6: this is 100% placeholder scaffolding with no real
       training logic. Folding the "real gap" half of this into B6's scope
       rather than tracking separately.)*
-- [~] **B11 — Two deployed Supabase edge functions are dead code**
+- [x] **B11 — Two deployed Supabase edge functions are dead code**
       (`supabase/functions/generate-music`, `supabase/functions/pulse-chat`)
       Nothing in `src/` calls them; frontend talks only to the FastAPI backend
       via `/api` proxy. Decide: wire them up or remove them.
-      *(2026-09-07 — `pulse-chat`'s logic (system prompt, provider, env var
-      names) was ported into `backend/services/pulse.py` as part of fixing B7,
-      so the FastAPI backend now has real functional parity with the edge
-      function. The edge function itself is still deployed and still
-      unreferenced by `src/` — still needs a decision on whether to delete it
-      or keep it as a documented alternative entry point.
-      `generate-music/index.ts` is untouched and still fully orphaned.)*
-- [~] **B12 — Wildcard CORS + no rate limiting on edge functions** (`supabase/functions/_shared/cors.ts:1-4`)
+      *(Resolved 2026-09-09 — deleted. Now confirmed (see the real-AI-provider
+      section above) that Supabase edge functions run in Supabase's cloud and
+      structurally cannot reach the LAN-only AI broker (`blackbetty1`) that
+      this app actually uses — there's no path to making them work for their
+      intended purpose here regardless of deploy access. `pulse-chat`'s logic
+      already lives in `backend/services/pulse.py` (ported when fixing B7);
+      `generate-music`'s logic was never used anywhere. Removed
+      `supabase/functions/` entirely — same call already made for F7's dead
+      router scaffolding. If these were ever deployed live on the Supabase
+      project, they still exist there until someone runs
+      `supabase functions delete generate-music pulse-chat` — I don't have
+      deploy access to do that myself.)*
+- [x] **B12 — Wildcard CORS + no rate limiting on edge functions** (`supabase/functions/_shared/cors.ts:1-4`)
       A leaked anon key lets anyone burn AI API budget with no validation.
-      *(2026-09-07 — added the achievable half: input validation (required
-      fields, length caps) on both `pulse-chat` and `generate-music`, so at
-      least malformed/oversized requests are rejected before hitting the AI
-      provider. Left `cors.ts`'s wildcard origin alone — Supabase edge
-      functions gate access via `verify_jwt` (checks the caller has a valid
-      anon/user JWT), which is the real access-control layer here, not CORS;
-      changing that is a Supabase project-level config decision, not a code
-      fix. Real per-user rate limiting still needs a small piece of
-      infra (e.g. a Supabase table tracking calls per user/IP) — not done,
-      out of scope for a quick fix. **Also note: these edge function changes
-      are only in the repo — they need `supabase functions deploy` to
-      actually take effect, which I haven't run since it touches the live
-      Supabase project.** *(2026-09-07 — checked: I don't actually have
-      deploy access to wherever this runs. The project's real backend
-      (`nzlodtgybdfhnmssnzlo.backend.onspace.ai` per `.env`) isn't standard
-      Supabase — it's a different platform ("OnSpace"), and none of the
-      Supabase projects my tools can see match it. Someone with access to
-      that OnSpace/Supabase project needs to run the deploy.)*
+      *(Resolved 2026-09-09 as part of B11 — moot now that the edge functions
+      are deleted; there's nothing left to rate-limit or lock down CORS on.
+      The input-validation work done on 2026-09-07 (required fields, length
+      caps) is gone with the files, which is fine since it was mitigating a
+      risk that no longer exists.)*
 - [x] **B13 — Unchecked AI response shape in edge functions**
       (`supabase/functions/generate-music/index.ts:59`, `pulse-chat/index.ts:61`)
       `data.choices[0].message.content` assumes well-formed response; throws
       raw TypeError on unexpected shape.
-      *(Fixed 2026-09-07 — both functions now use optional chaining and
-      return a clean `502 {"error":"AI service returned no content"}` instead
-      of an unhandled TypeError when the upstream response is malformed.
-      Same caveat as B12: needs deploying to take effect.)*
+      *(Moot as of 2026-09-09 — files deleted as part of B11. The equivalent
+      fix already exists for the real chat path in
+      `backend/services/pulse.py` (`get_pulse_reply`'s response-shape check).)*
 - [x] **B14 — Client-side-only generation limit, not enforced server-side** (`src/ai/LocalLearning.js:38-46`)
       Trivially bypassed via clearing localStorage; backend never independently
       checks a real limit (ties into B1).
