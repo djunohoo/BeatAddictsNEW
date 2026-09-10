@@ -1,11 +1,13 @@
-import { Play, Pause, Square, Save, FolderOpen, Settings, Zap } from 'lucide-react';
+import { Play, Pause, Square, Save, FolderOpen, Settings, Zap, LogOut } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useProjectStore } from '../../stores/projectStore';
 import { usePulseStore } from '../../stores/pulseStore';
+import { useAuthStore } from '../../stores/authStore';
 
 export const Header = () => {
   const { currentProject, isPlaying, togglePlay, stop, setBPM } = useProjectStore();
   const { togglePulse } = usePulseStore();
+  const { user, signOut } = useAuthStore();
 
   return (
     <header className="h-16 border-b border-studio-border bg-studio-dark/95 backdrop-blur-sm flex items-center justify-between px-6 sticky top-0 z-50">
@@ -89,6 +91,15 @@ export const Header = () => {
         >
           <Zap className="w-4 h-4 mr-2" />
           Pulse
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => signOut()}
+          title={user?.email ? `Sign out (${user.email})` : 'Sign out'}
+          className="border-studio-border hover:border-neon-purple hover:bg-neon-purple/10"
+        >
+          <LogOut className="w-4 h-4" />
         </Button>
       </div>
     </header>

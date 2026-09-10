@@ -11,14 +11,13 @@ from .db import count_recent_generations
 
 DAILY_GENERATION_LIMIT = int(os.getenv("GENERATION_DAILY_LIMIT") or "20")
 
-# Per-IP sliding-window limit. This exists because the daily per-user_id cap
-# below is keyed on a client-supplied, unauthenticated string — anyone can
-# reset their own count by sending a fresh user_id on every request. IP
-# address is still spoofable/rotatable, but it raises the cost of abuse well
-# above "increment a UUID", without requiring the real auth system (B2) that
-# doesn't exist yet. This is in-memory and per-process: fine for a single
-# backend instance, would need a shared store (e.g. Supabase) to hold across
-# multiple instances.
+# Per-IP sliding-window limit. user_id is now a real, verified identity (see
+# services/auth.py) rather than a client-supplied string, so the daily cap
+# below can no longer be reset by just making up a new id -- but someone
+# could still create many free accounts to the same end. IP address is
+# spoofable/rotatable too, but this raises the cost of that abuse further.
+# This is in-memory and per-process: fine for a single backend instance,
+# would need a shared store (e.g. Supabase) to hold across multiple instances.
 IP_RATE_LIMIT_PER_MINUTE = int(os.getenv("IP_RATE_LIMIT_PER_MINUTE") or "10")
 _ip_request_log: dict = defaultdict(deque)
 _ip_lock = Lock()
