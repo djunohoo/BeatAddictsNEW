@@ -1,7 +1,7 @@
-import { Home, Music, Sparkles, Layers, Mic, BookOpen, Settings } from 'lucide-react';
+import { Home, Music, Sparkles, Layers, BookOpen, Settings } from 'lucide-react';
 import { useState } from 'react';
 
-type TabType = 'dashboard' | 'sequencer' | 'ai' | 'mixer' | 'voice' | 'tutorials';
+type TabType = 'dashboard' | 'sequencer' | 'ai' | 'mixer' | 'tutorials';
 
 interface SidebarProps {
   activeTab: TabType;
@@ -14,7 +14,6 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     { id: 'sequencer' as TabType, icon: Music, label: 'Sequencer' },
     { id: 'ai' as TabType, icon: Sparkles, label: 'AI Studio' },
     { id: 'mixer' as TabType, icon: Layers, label: 'Mixer' },
-    { id: 'voice' as TabType, icon: Mic, label: 'Voice Clone' },
     { id: 'tutorials' as TabType, icon: BookOpen, label: 'Learn' }
   ];
 
