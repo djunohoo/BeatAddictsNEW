@@ -20,6 +20,16 @@ const INSTRUMENTS = [
 
 type Pattern = Record<string, boolean[]>;
 
+export type SavedPatternEntry = {
+  id: string;
+  name: string;
+  genre: string;
+  mood: string;
+  style: string;
+  pattern: Pattern;
+  savedAt?: string;
+};
+
 type SequencerSession = {
   pattern: Pattern;
   currentPattern: number;
@@ -78,7 +88,7 @@ export const Sequencer = () => {
   const setBpm = useProjectStore((s) => s.setBPM);
   const currentStep = useProjectStore((s) => s.currentStep);
   const setCurrentStep = useProjectStore((s) => s.setCurrentStep);
-  const [savedPatterns, setSavedPatterns] = useState<Array<{ id: string; name: string; genre: string; mood: string; style: string; pattern: Pattern }>>([]);
+  const [savedPatterns, setSavedPatterns] = useState<SavedPatternEntry[]>([]);
   const [selectedSavedPatternId, setSelectedSavedPatternId] = useState('');
   const [loadedSamples, setLoadedSamples] = useState<LoadedSample[]>([]);
   const [sampleLoadError, setSampleLoadError] = useState('');
@@ -155,7 +165,7 @@ export const Sequencer = () => {
     });
   };
 
-  const persistSavedPatterns = (nextPatterns: Array<{ id: string; name: string; genre: string; mood: string; style: string; pattern: Pattern }>) => {
+  const persistSavedPatterns = (nextPatterns: SavedPatternEntry[]) => {
     setSavedPatterns(nextPatterns);
     localStorage.setItem(PATTERN_LIBRARY_KEY, JSON.stringify(nextPatterns));
   };
@@ -169,7 +179,7 @@ export const Sequencer = () => {
         // loading a malformed one via loadSavedPattern() would crash the
         // grid render (pattern[instrument.id].map(...) with no guard).
         const valid = Array.isArray(parsed)
-          ? parsed.filter((entry): entry is { id: string; name: string; genre: string; mood: string; style: string; pattern: Pattern } =>
+          ? parsed.filter((entry): entry is SavedPatternEntry =>
               !!entry && typeof entry === 'object' && typeof entry.id === 'string' && isValidPattern(entry.pattern)
             )
           : [];
@@ -394,13 +404,14 @@ export const Sequencer = () => {
 
   const savePattern = () => {
     const id = `${selectedGenre}-${selectedMood}-${Date.now()}`;
-    const entry = {
+    const entry: SavedPatternEntry = {
       id,
       name: `${selectedStyle} (${selectedGenre} / ${selectedMood})`,
       genre: selectedGenre,
       mood: selectedMood,
       style: selectedStyle,
-      pattern
+      pattern,
+      savedAt: new Date().toISOString()
     };
     const next = [entry, ...savedPatterns].slice(0, 12);
     persistSavedPatterns(next);

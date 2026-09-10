@@ -17,7 +17,7 @@ from models.inference import (
     generate_arrangement,
 )
 from services.legal import enforce_phase0
-from services.db import log_generation, store_feedback, store_midi, enqueue_training_batch
+from services.db import log_generation, store_feedback, store_midi, enqueue_training_batch, count_all_generations
 from services.pulse import get_pulse_reply, PulseUnavailable
 
 app = FastAPI(title="Beat Addicts AI Engine", version="0.1.0")
@@ -51,6 +51,15 @@ class GenerationRequest(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/stats/generations")
+def generation_stats(user_id: str = "local-user"):
+    """Real generation count for the Dashboard, replacing a previously
+    hardcoded number. `count: null` means Supabase isn't configured or the
+    query failed -- the frontend should show an honest "unavailable" state
+    rather than a fabricated number in that case."""
+    return {"count": count_all_generations(user_id)}
 
 
 @app.post("/generate/drums")

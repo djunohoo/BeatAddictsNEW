@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AIStudio } from './components/features/AIStudio';
 import { Dashboard } from './components/features/Dashboard';
 import { Mixer } from './components/features/Mixer';
@@ -8,11 +8,14 @@ import { Sidebar } from './components/features/Sidebar';
 import { Tutorials } from './components/features/Tutorials';
 import { Header } from './components/layout/Header';
 import { Toaster } from './components/ui/toaster';
+import { startStudioTimeTracking } from './lib/studioTime';
 
 type TabType = 'dashboard' | 'sequencer' | 'ai' | 'mixer' | 'voice' | 'tutorials';
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+
+  useEffect(() => startStudioTimeTracking(), []);
 
   const renderContent = () => {
     switch (activeTab) {

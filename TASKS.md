@@ -156,6 +156,41 @@ each shipped as its own PR:
       completion. (Hit and fixed an unrelated Vite dev-server hiccup along
       the way: a stale pre-bundled dependency chunk needed a cache clear —
       not a code bug, just a dev-server quirk from adding a new icon import.)
+- [x] **S3 — Dashboard stats were fabricated/hardcoded** (`src/components/features/Dashboard.tsx`)
+      "24 Projects Created," "156 AI Generations," "42h Studio Time," "Pro"
+      membership, and a 4-card "Recent Projects" list were all hardcoded
+      numbers/names with no data behind them.
+      - **Saved Patterns** (replaces "Projects Created," which had nothing
+        real to count against — there's no multi-project system): real count
+        read from Sequencer's saved-pattern library in localStorage.
+      - **AI Generations**: real count from the Supabase `ai_generations`
+        table via a new `GET /stats/generations` backend endpoint
+        (`backend/services/db.py:count_all_generations`); shows `···` while
+        loading and `—` (not a fake number) if the backend/Supabase is
+        unavailable.
+      - **Studio Time**: genuinely measured now. New `src/lib/studioTime.ts`
+        accumulates real elapsed time in localStorage every 15s while the
+        tab is visible (started once from `App.tsx`), replacing a number
+        that was never tracked at all.
+      - **Membership**: changed "Pro" → "Free" — there's no billing system,
+        so claiming a paid tier was an outright false claim, not just an
+        optimistic placeholder.
+      - **Recent Patterns** (replaces "Recent Projects"): shows the real
+        saved-pattern library (name/genre/relative time from a new
+        `savedAt` timestamp added to the saved-pattern schema in
+        `Sequencer.tsx`, optional so old entries without one still load
+        fine), with an honest empty state instead of always showing 4 fake
+        cards.
+      Verified in-browser: fresh load showed 0/0/`<1m`/Free with an honest
+      empty state; saved a real pattern in the Sequencer, confirmed the
+      Dashboard's count and the Recent Patterns card updated to reflect it
+      on next visit, showing the real name/genre/"just now" timestamp.
+      (Also discovered and worked around an unrelated dev-environment
+      quirk: uvicorn's `--reload` StatReload was serving a stale import
+      snapshot on Windows in this environment, silently 404ing a brand new
+      route even after a full process restart — confirmed by testing
+      without `--reload`, where the same code worked immediately. Not a
+      code bug; noted for whoever runs this backend locally on Windows.)
 
 ---
 
