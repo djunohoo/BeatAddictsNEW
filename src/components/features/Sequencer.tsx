@@ -85,6 +85,13 @@ export const Sequencer = () => {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const intervalRef = useRef<number | null>(null);
   const patternRef = useRef<Pattern>();
+  // Master effects bus: every instrument's dry signal, plus its reverb/delay
+  // sends, route through these three persistent nodes into the destination.
+  // Built once per AudioContext (see ensureMasterBus) so the reverb tail can
+  // carry over between hits instead of restarting every time.
+  const masterBusRef = useRef<DynamicsCompressorNode | null>(null);
+  const reverbBusRef = useRef<ConvolverNode | null>(null);
+  const delayBusRef = useRef<DelayNode | null>(null);
 
   const PATTERN_LIBRARY_KEY = 'beataddicts_saved_patterns';
   const genreOptions = ['Tech House', 'Deep House', 'Techno', 'Minimal', 'Progressive', 'Acid', 'Electro', 'House', 'Bass House / Hybrid Trap', 'Trap', 'Lo-Fi', 'Ambient'];
@@ -182,6 +189,90 @@ export const Sequencer = () => {
     });
   };
 
+  // A synthetic reverb impulse response: exponentially-decaying stereo
+  // noise. Not a sampled space, but a real convolution reverb tail rather
+  // than a decorative "Reverb" knob that does nothing.
+  const buildImpulseResponse = (ctx: BaseAudioContext, durationSec: number, decay: number): AudioBuffer => {
+    const length = Math.max(1, Math.floor(ctx.sampleRate * durationSec));
+    const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+    for (let channel = 0; channel < 2; channel += 1) {
+      const data = impulse.getChannelData(channel);
+      for (let i = 0; i < length; i += 1) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+      }
+    }
+    return impulse;
+  };
+
+  const ensureMasterBus = (ctx: AudioContext) => {
+    if (masterBusRef.current) return;
+
+    // Limiter: a DynamicsCompressorNode. Rather than rewiring the graph to
+    // toggle it, its threshold/ratio are set live in playHit() based on the
+    // mixer's `limiter` switch -- near-transparent when off, real limiting
+    // when on.
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.connect(ctx.destination);
+    masterBusRef.current = compressor;
+
+    const convolver = ctx.createConvolver();
+    convolver.buffer = buildImpulseResponse(ctx, 2.2, 2.5);
+    const reverbWet = ctx.createGain();
+    reverbWet.gain.value = 0.9;
+    convolver.connect(reverbWet);
+    reverbWet.connect(compressor);
+    reverbBusRef.current = convolver;
+
+    const delay = ctx.createDelay(1.0);
+    delay.delayTime.value = 0.28;
+    const feedback = ctx.createGain();
+    feedback.gain.value = 0.35;
+    const delayWet = ctx.createGain();
+    delayWet.gain.value = 0.7;
+    delay.connect(feedback);
+    feedback.connect(delay);
+    delay.connect(delayWet);
+    delayWet.connect(compressor);
+    delayBusRef.current = delay;
+  };
+
+  // Every instrument's synthesis routes here instead of straight to
+  // ctx.destination: a per-hit highpass/lowpass filter pair (from the
+  // track's EQ knobs), then into the dry signal plus reverb/delay sends
+  // (from the track's send knobs) on the shared master bus. This is what
+  // makes the Mixer's EQ/reverb/delay controls actually change the sound
+  // instead of being inert UI state.
+  const buildTrackChain = (ctx: AudioContext, track: { highpass: number; lowpass: number; reverb: number; delay: number }): AudioNode => {
+    ensureMasterBus(ctx);
+
+    const highpass = ctx.createBiquadFilter();
+    highpass.type = 'highpass';
+    highpass.frequency.value = 20 + (track.highpass / 100) * 1980;
+
+    const lowpass = ctx.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.frequency.value = 200 + (track.lowpass / 100) * 19800;
+
+    highpass.connect(lowpass);
+    if (masterBusRef.current) {
+      lowpass.connect(masterBusRef.current);
+    }
+    if (track.reverb > 0 && reverbBusRef.current) {
+      const send = ctx.createGain();
+      send.gain.value = (track.reverb / 100) * 0.6;
+      lowpass.connect(send);
+      send.connect(reverbBusRef.current);
+    }
+    if (track.delay > 0 && delayBusRef.current) {
+      const send = ctx.createGain();
+      send.gain.value = (track.delay / 100) * 0.5;
+      lowpass.connect(send);
+      send.connect(delayBusRef.current);
+    }
+
+    return highpass;
+  };
+
   const ensureAudioContext = async (): Promise<AudioContext | null> => {
     try {
       if (!audioCtxRef.current) {
@@ -190,6 +281,7 @@ export const Sequencer = () => {
       if (audioCtxRef.current.state === 'suspended') {
         await audioCtxRef.current.resume();
       }
+      ensureMasterBus(audioCtxRef.current);
       return audioCtxRef.current;
     } catch (error: any) {
       toast({
@@ -361,33 +453,41 @@ export const Sequencer = () => {
     const widthFactor = mixState.stereoWidth / 100;
     const pan = (track.pan / 50) * widthFactor;
 
+    if (masterBusRef.current) {
+      // Live-updated per hit so toggling the Limiter switch takes effect
+      // immediately: near-transparent when off, real limiting when on.
+      masterBusRef.current.threshold.setValueAtTime(mixState.limiter ? -6 : 0, now);
+      masterBusRef.current.ratio.setValueAtTime(mixState.limiter ? 12 : 1, now);
+    }
+    const output = buildTrackChain(ctx, track);
+
     switch (instrumentId) {
       case 'kick':
-        playKickDrum(ctx, now, volume, pan);
+        playKickDrum(ctx, now, volume, pan, output);
         break;
       case 'snare':
-        playSnareDrum(ctx, now, volume, pan);
+        playSnareDrum(ctx, now, volume, pan, output);
         break;
       case 'hihat':
-        playHiHat(ctx, now, volume * 0.6, pan);
+        playHiHat(ctx, now, volume * 0.6, pan, output);
         break;
       case 'openhat':
-        playOpenHat(ctx, now, volume * 0.8, pan);
+        playOpenHat(ctx, now, volume * 0.8, pan, output);
         break;
       case 'clap':
-        playClap(ctx, now, volume, pan);
+        playClap(ctx, now, volume, pan, output);
         break;
       case 'crash':
-        playCrash(ctx, now, volume * 0.7, pan);
+        playCrash(ctx, now, volume * 0.7, pan, output);
         break;
       default:
-        playPercussion(ctx, now, volume, pan);
+        playPercussion(ctx, now, volume, pan, output);
         break;
     }
   };
 
   // Professional kick drum synthesis
-  const playKickDrum = (ctx: AudioContext, time: number, volume: number, pan: number) => {
+  const playKickDrum = (ctx: AudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
     // Main oscillator for body
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
@@ -427,7 +527,7 @@ export const Sequencer = () => {
     gain1.connect(panner);
     gain2.connect(panner);
     gain3.connect(panner);
-    panner.connect(ctx.destination);
+    panner.connect(output);
 
     osc1.start(time);
     osc2.start(time);
@@ -438,7 +538,7 @@ export const Sequencer = () => {
   };
 
   // Professional snare drum synthesis
-  const playSnareDrum = (ctx: AudioContext, time: number, volume: number, pan: number) => {
+  const playSnareDrum = (ctx: AudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
     // Tone oscillators
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
@@ -474,7 +574,7 @@ export const Sequencer = () => {
     noiseFilter.connect(noiseGain);
     gain1.connect(panner);
     noiseGain.connect(panner);
-    panner.connect(ctx.destination);
+    panner.connect(output);
 
     osc1.start(time);
     noiseSource.start(time);
@@ -483,7 +583,7 @@ export const Sequencer = () => {
   };
 
   // Hi-hat synthesis
-  const playHiHat = (ctx: AudioContext, time: number, volume: number, pan: number) => {
+  const playHiHat = (ctx: AudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
     const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
     const noiseData = noiseBuffer.getChannelData(0);
     for (let i = 0; i < noiseData.length; i++) {
@@ -506,14 +606,14 @@ export const Sequencer = () => {
     noiseSource.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
     noiseGain.connect(panner);
-    panner.connect(ctx.destination);
+    panner.connect(output);
 
     noiseSource.start(time);
     noiseSource.stop(time + 0.1);
   };
 
   // Open hi-hat synthesis
-  const playOpenHat = (ctx: AudioContext, time: number, volume: number, pan: number) => {
+  const playOpenHat = (ctx: AudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
     const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.25, ctx.sampleRate);
     const noiseData = noiseBuffer.getChannelData(0);
     for (let i = 0; i < noiseData.length; i++) {
@@ -536,14 +636,14 @@ export const Sequencer = () => {
     noiseSource.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
     noiseGain.connect(panner);
-    panner.connect(ctx.destination);
+    panner.connect(output);
 
     noiseSource.start(time);
     noiseSource.stop(time + 0.25);
   };
 
   // Clap synthesis
-  const playClap = (ctx: AudioContext, time: number, volume: number, pan: number) => {
+  const playClap = (ctx: AudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
     const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.15, ctx.sampleRate);
     const noiseData = noiseBuffer.getChannelData(0);
     for (let i = 0; i < noiseData.length; i++) {
@@ -567,14 +667,14 @@ export const Sequencer = () => {
     noiseSource.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
     noiseGain.connect(panner);
-    panner.connect(ctx.destination);
+    panner.connect(output);
 
     noiseSource.start(time);
     noiseSource.stop(time + 0.15);
   };
 
   // Crash cymbal synthesis
-  const playCrash = (ctx: AudioContext, time: number, volume: number, pan: number) => {
+  const playCrash = (ctx: AudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
     const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.8, ctx.sampleRate);
     const noiseData = noiseBuffer.getChannelData(0);
     for (let i = 0; i < noiseData.length; i++) {
@@ -597,14 +697,14 @@ export const Sequencer = () => {
     noiseSource.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
     noiseGain.connect(panner);
-    panner.connect(ctx.destination);
+    panner.connect(output);
 
     noiseSource.start(time);
     noiseSource.stop(time + 0.8);
   };
 
   // Percussion synthesis
-  const playPercussion = (ctx: AudioContext, time: number, volume: number, pan: number) => {
+  const playPercussion = (ctx: AudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'square';
@@ -619,7 +719,7 @@ export const Sequencer = () => {
 
     osc.connect(gain);
     gain.connect(panner);
-    panner.connect(ctx.destination);
+    panner.connect(output);
 
     osc.start(time);
     osc.stop(time + 0.2);

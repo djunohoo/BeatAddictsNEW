@@ -114,9 +114,30 @@ now existing. Top 5 recommended fixes by impact/achievability: (1) real WAV
 export via `OfflineAudioContext` — the audio graph already exists, this is
 reachable; (2) make Mixer effects actually process audio; (3) replace
 fabricated Dashboard data or label it as sample content; (4) move project
-persistence server-side; (5) ship or remove Voice Clone as a nav tab. None
-of this has been actioned — it's a product-direction conversation, not a
-quick fix.
+persistence server-side; (5) ship or remove Voice Clone as a nav tab.
+
+**Decision 2026-09-10: all 5, full effort.** Working through them in order,
+each shipped as its own PR:
+
+- [x] **S1 — Mixer effects didn't touch the audio graph** (`src/components/features/Sequencer.tsx`)
+      Volume/pan/mute/solo/master-volume/stereo-width were already real
+      (computed directly into gain/pan values in `playHit`) — the actual gap
+      was narrower than the review implied: highpass/lowpass EQ, reverb,
+      delay, and the limiter were computed nowhere and never inserted into
+      the graph; every instrument connected straight to `ctx.destination`.
+      Added a persistent master bus (built once per `AudioContext`, not
+      per-hit, so reverb tails carry over between hits): a
+      `DynamicsCompressorNode` for the limiter (threshold/ratio set live
+      from the mixer's `limiter` switch — near-transparent when off, real
+      limiting when on), a `ConvolverNode` with a procedurally-generated
+      exponential-decay stereo impulse response for reverb, and a feedback
+      `DelayNode` for delay. Every instrument now routes through a per-hit
+      highpass→lowpass filter pair (from the track's EQ knobs) into the dry
+      signal plus conditional reverb/delay sends, all previously-fake sliders
+      now real. Verified by instrumenting `AudioContext.prototype` to count
+      node creation during live playback: master bus nodes created exactly
+      once (compressor/convolver/delay), highpass/lowpass filters created on
+      every hit; fresh-tab console clean through a full play/stop cycle.
 
 ---
 
