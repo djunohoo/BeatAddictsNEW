@@ -303,13 +303,52 @@ items from earlier:
       request — if Supabase isn't configured or the count query errors, so a
       DB hiccup can't block all generation. Real licensing is still an open
       product decision — B1 only closes the "trivially bypassable" part.)*
-- [ ] **B2 — No auth on any backend endpoint** (`backend/app/main.py:44-127`)
-      `user_id` is free text, no session/JWT verification. Anyone can write
-      feedback/MIDI/training records under an arbitrary `user_id`.
-      **Decision 2026-09-07:** holding off — there's no login/session UI in
-      the frontend yet, so backend JWT verification would have nothing to
-      verify against. Needs a cross-lane design (frontend login flow +
-      backend verification) before this can be done for real. Not a quick fix.
+- [x] **B2 — No auth on any backend endpoint** (`backend/app/main.py`)
+      `user_id` was free text, no session/JWT verification. Anyone could write
+      feedback/MIDI/training records under an arbitrary `user_id`, and every
+      per-user limit/count (B1's daily cap, S3's Dashboard stats, S5's saved
+      patterns) was only as real as a string nobody verified.
+      **Decision 2026-09-10:** real accounts via Supabase Auth,
+      email/password.
+      - **Frontend**: new `src/stores/authStore.ts` (session/user state,
+        `signIn`/`signUp`/`signOut`, subscribes to
+        `supabase.auth.onAuthStateChange`) and `src/components/features/Auth.tsx`
+        (login/signup screen). `App.tsx` now gates its entire render on
+        having a session — no session, no app, just the auth screen (and a
+        brief loading state while the existing session is restored from
+        storage on first load). `Header.tsx` shows a sign-out button.
+      - **Backend**: new `backend/services/auth.py:get_current_user_id` — a
+        FastAPI dependency that reads the `Authorization: Bearer <token>`
+        header and verifies it against Supabase Auth
+        (`client.auth.get_user(token)`), returning the real verified user id
+        or a `401`. No new secret needed (doesn't use the Postgres password
+        or a separate JWT secret — verification happens through Supabase's
+        own auth API using the same service client already configured).
+        Every endpoint that used to trust a client-supplied `user_id` in the
+        request body/query now takes `user_id: str = Depends(get_current_user_id)`
+        instead: all five `/generate/*` routes, `/stats/generations`,
+        `/feedback`, `/midi`, `/training/batch`, and all three `/patterns`
+        routes. `user_id` was removed from every request body/query model
+        that had it — there's nothing left for a client to lie about.
+        `/health` and `/pulse/chat` stay open (neither touches per-user data).
+      - `AIClient.js` now attaches the current Supabase session's access
+        token to every request automatically (`Authorization` header), so no
+        call site needed to change what it sends.
+      - Verified end-to-end in-browser: unauthenticated `GET /stats/generations`
+        → real `401`; signed up a real account through the new Auth screen
+        (account created, Supabase's own "check your email to confirm"
+        flow kicked in exactly as configured); attempted sign-in before
+        confirming → got Supabase's real `Email not confirmed` error
+        surfaced in the UI, not a crash or a silent fake success — proves
+        the signup/signin/error-surfacing path is genuinely wired to
+        Supabase Auth end-to-end, not stubbed.
+      - **Note**: this Supabase project has "Confirm email" on by default
+        (Supabase's standard setting for a new project) — a signed-up user
+        can't sign in until they click the confirmation link. That's a
+        product/UX call (leave it for a real deployment, or turn it off in
+        Supabase Auth settings for faster internal testing) — not something
+        I changed, since it's a dashboard setting outside what I have access
+        to from here.
 - [x] **B3 — Invalid CORS config** (`backend/app/main.py:18-24`)
       `allow_origins=["*"]` + `allow_credentials=True` is spec-invalid and
       browser-behavior-dependent.

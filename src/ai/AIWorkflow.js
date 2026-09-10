@@ -7,7 +7,9 @@ const buildPayload = (input) => {
   const prefs = LocalLearning.getPreferences();
   return {
     ...input,
-    user_id: input.userId || 'local-user',
+    // Identity comes from the verified Authorization bearer token the
+    // backend checks on every request (see services/auth.py), not from
+    // anything sent here.
     opt_in: prefs.optIn === true,
     // license_ok/generation_limit_ok are informational only -- the backend
     // never trusts client-supplied values for either (see
