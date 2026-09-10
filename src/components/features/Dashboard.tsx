@@ -1,11 +1,66 @@
-import { Award, Clock, Mic, Music, Play, Sparkles, TrendingUp } from 'lucide-react';
+import { Award, Clock, Mic, Music, Play, Sparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AIClient } from '../../ai/AIClient';
+import { formatStudioTime, getStudioSeconds } from '../../lib/studioTime';
 import { Button } from '../ui/button';
+import type { SavedPatternEntry } from './Sequencer';
+
+const PATTERN_LIBRARY_KEY = 'beataddicts_saved_patterns';
 
 type DashboardProps = {
   onNavigate: (tab: 'dashboard' | 'sequencer' | 'ai' | 'mixer' | 'voice' | 'tutorials') => void;
 };
 
+const formatRelativeTime = (iso?: string): string => {
+  if (!iso) return 'a while ago';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 'a while ago';
+  const diffMs = Date.now() - then;
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+};
+
+const loadSavedPatterns = (): SavedPatternEntry[] => {
+  try {
+    const raw = localStorage.getItem(PATTERN_LIBRARY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
 export const Dashboard = ({ onNavigate }: DashboardProps) => {
+  const [savedPatterns, setSavedPatterns] = useState<SavedPatternEntry[]>([]);
+  const [studioSeconds, setStudioSeconds] = useState(0);
+  const [generationCount, setGenerationCount] = useState<number | null>(null);
+  const [generationCountError, setGenerationCountError] = useState(false);
+
+  useEffect(() => {
+    setSavedPatterns(loadSavedPatterns());
+    setStudioSeconds(getStudioSeconds());
+
+    let cancelled = false;
+    AIClient.getGenerationCount()
+      .then((data) => {
+        if (!cancelled) setGenerationCount(typeof data?.count === 'number' ? data.count : null);
+      })
+      .catch(() => {
+        if (!cancelled) setGenerationCountError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const recentPatterns = savedPatterns.slice(0, 4);
+
   return (
     <div className="flex-1 overflow-auto p-6">
       <div className="max-w-7xl mx-auto">
@@ -59,18 +114,18 @@ export const Dashboard = ({ onNavigate }: DashboardProps) => {
           <div className="glass-panel rounded-xl p-6">
             <div className="flex items-center justify-between mb-2">
               <Music className="w-6 h-6 text-neon-purple" />
-              <TrendingUp className="w-4 h-4 text-green-500" />
             </div>
-            <div className="text-3xl font-bold mb-1">24</div>
-            <div className="text-sm text-muted-foreground">Projects Created</div>
+            <div className="text-3xl font-bold mb-1">{savedPatterns.length}</div>
+            <div className="text-sm text-muted-foreground">Saved Patterns</div>
           </div>
 
           <div className="glass-panel rounded-xl p-6">
             <div className="flex items-center justify-between mb-2">
               <Sparkles className="w-6 h-6 text-neon-cyan" />
-              <TrendingUp className="w-4 h-4 text-green-500" />
             </div>
-            <div className="text-3xl font-bold mb-1">156</div>
+            <div className="text-3xl font-bold mb-1">
+              {generationCount !== null ? generationCount : generationCountError ? '—' : '···'}
+            </div>
             <div className="text-sm text-muted-foreground">AI Generations</div>
           </div>
 
@@ -78,7 +133,7 @@ export const Dashboard = ({ onNavigate }: DashboardProps) => {
             <div className="flex items-center justify-between mb-2">
               <Clock className="w-6 h-6 text-neon-pink" />
             </div>
-            <div className="text-3xl font-bold mb-1">42h</div>
+            <div className="text-3xl font-bold mb-1">{formatStudioTime(studioSeconds)}</div>
             <div className="text-sm text-muted-foreground">Studio Time</div>
           </div>
 
@@ -86,7 +141,7 @@ export const Dashboard = ({ onNavigate }: DashboardProps) => {
             <div className="flex items-center justify-between mb-2">
               <Award className="w-6 h-6 text-yellow-500" />
             </div>
-            <div className="text-3xl font-bold mb-1">Pro</div>
+            <div className="text-3xl font-bold mb-1">Free</div>
             <div className="text-sm text-muted-foreground">Membership</div>
           </div>
         </div>
@@ -145,33 +200,40 @@ export const Dashboard = ({ onNavigate }: DashboardProps) => {
           </div>
         </div>
 
-        {/* Recent Projects */}
+        {/* Recent Patterns */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold">Recent Projects</h2>
-            <Button variant="ghost" className="text-neon-purple hover:bg-neon-purple/10">
-              View All
-            </Button>
+            <h2 className="text-2xl font-bold">Recent Patterns</h2>
+            {savedPatterns.length > 0 && (
+              <Button variant="ghost" className="text-neon-purple hover:bg-neon-purple/10" onClick={() => onNavigate('sequencer')}>
+                Open Sequencer
+              </Button>
+            )}
           </div>
-          <div className="grid grid-cols-4 gap-4">
-            {[
-              { name: 'Summer Vibes', genre: 'House', time: '2h ago' },
-              { name: 'Dark Beats', genre: 'Trap', time: '5h ago' },
-              { name: 'Chill Session', genre: 'Lo-Fi', time: '1d ago' },
-              { name: 'Epic Drop', genre: 'Electronic', time: '2d ago' }
-            ].map((project, i) => (
-              <div key={i} className="glass-panel rounded-lg p-4 hover:border-neon-purple/50 transition-all cursor-pointer">
-                <div className="w-full h-24 bg-gradient-to-br from-neon-purple/20 to-neon-cyan/20 rounded-lg mb-3 flex items-center justify-center">
-                  <Play className="w-8 h-8 text-neon-purple" />
+          {recentPatterns.length === 0 ? (
+            <div className="glass-panel rounded-lg p-8 text-center text-muted-foreground">
+              No patterns saved yet — head to the Sequencer and hit Save to build your library.
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 gap-4">
+              {recentPatterns.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="glass-panel rounded-lg p-4 hover:border-neon-purple/50 transition-all cursor-pointer"
+                  onClick={() => onNavigate('sequencer')}
+                >
+                  <div className="w-full h-24 bg-gradient-to-br from-neon-purple/20 to-neon-cyan/20 rounded-lg mb-3 flex items-center justify-center">
+                    <Play className="w-8 h-8 text-neon-purple" />
+                  </div>
+                  <h4 className="font-semibold mb-1 truncate">{entry.name}</h4>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{entry.genre}</span>
+                    <span>{formatRelativeTime(entry.savedAt)}</span>
+                  </div>
                 </div>
-                <h4 className="font-semibold mb-1">{project.name}</h4>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{project.genre}</span>
-                  <span>{project.time}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

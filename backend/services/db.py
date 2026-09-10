@@ -91,3 +91,25 @@ def count_recent_generations(user_id: str, since_iso: str) -> Optional[int]:
     except Exception:
         logger.exception("Failed to count recent generations for user_id=%s", user_id)
         return None
+
+
+def count_all_generations(user_id: str) -> Optional[int]:
+    """Total ai_generations rows for user_id, all time. Used for an honest
+    Dashboard stat instead of a hardcoded number. Returns None if Supabase
+    isn't configured or the query fails, so the caller can show a real
+    "unavailable" state instead of a fabricated number.
+    """
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        result = (
+            client.table("ai_generations")
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return result.count
+    except Exception:
+        logger.exception("Failed to count total generations for user_id=%s", user_id)
+        return None
