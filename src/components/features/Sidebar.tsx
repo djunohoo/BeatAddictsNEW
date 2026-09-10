@@ -11,8 +11,8 @@ interface SidebarProps {
 export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
   const tabs = [
     { id: 'dashboard' as TabType, icon: Home, label: 'Dashboard' },
-    { id: 'sequencer' as TabType, icon: Music, label: 'Sequencer' },
     { id: 'ai' as TabType, icon: Sparkles, label: 'AI Studio' },
+    { id: 'sequencer' as TabType, icon: Music, label: 'Sequencer' },
     { id: 'mixer' as TabType, icon: Layers, label: 'Mixer' },
     { id: 'tutorials' as TabType, icon: BookOpen, label: 'Learn' }
   ];
