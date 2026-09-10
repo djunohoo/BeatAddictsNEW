@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Any, Dict, Optional
@@ -54,40 +54,40 @@ def health():
 
 
 @app.post("/generate/drums")
-def drums(req: GenerationRequest):
-    enforce_phase0(req)
+def drums(req: GenerationRequest, request: Request):
+    enforce_phase0(req, request.client.host if request.client else None)
     result = generate_drums(req)
     log_generation(req, "drums", result)
     return result
 
 
 @app.post("/generate/bassline")
-def bassline(req: GenerationRequest):
-    enforce_phase0(req)
+def bassline(req: GenerationRequest, request: Request):
+    enforce_phase0(req, request.client.host if request.client else None)
     result = generate_bassline(req)
     log_generation(req, "bassline", result)
     return result
 
 
 @app.post("/generate/melody")
-def melody(req: GenerationRequest):
-    enforce_phase0(req)
+def melody(req: GenerationRequest, request: Request):
+    enforce_phase0(req, request.client.host if request.client else None)
     result = generate_melody(req)
     log_generation(req, "melody", result)
     return result
 
 
 @app.post("/generate/chords")
-def chords(req: GenerationRequest):
-    enforce_phase0(req)
+def chords(req: GenerationRequest, request: Request):
+    enforce_phase0(req, request.client.host if request.client else None)
     result = generate_chords(req)
     log_generation(req, "chords", result)
     return result
 
 
 @app.post("/generate/arrangement")
-def arrangement(req: GenerationRequest):
-    enforce_phase0(req)
+def arrangement(req: GenerationRequest, request: Request):
+    enforce_phase0(req, request.client.host if request.client else None)
     result = generate_arrangement(req)
     log_generation(req, "arrangement", result)
     return result
@@ -99,9 +99,9 @@ class PulseRequest(BaseModel):
 
 
 @app.post("/pulse/chat")
-def pulse_chat(req: PulseRequest):
+async def pulse_chat(req: PulseRequest):
     try:
-        reply = get_pulse_reply(req.message, req.conversationHistory)
+        reply = await get_pulse_reply(req.message, req.conversationHistory)
     except PulseUnavailable as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     return {"reply": reply}

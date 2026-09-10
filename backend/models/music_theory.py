@@ -74,6 +74,7 @@ def build_progression(genre: str, mood: str, complexity: int) -> List[int]:
 
 
 def build_chords(genre: str, mood: str, complexity: int) -> List[str]:
+    complexity = max(0, min(100, complexity or 50))
     root_pc, scale, _ = key_for(genre, mood)
     progression = build_progression(genre, mood, complexity)
     return [chord_symbol(root_pc, scale, deg, complexity) for deg in progression]
