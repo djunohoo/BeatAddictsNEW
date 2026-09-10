@@ -4,9 +4,7 @@ const defaultPrefs = {
   optIn: false,
   favoriteGenres: [],
   rejectedPatterns: 0,
-  acceptedPatterns: 0,
-  generationCount: 0,
-  generationLimit: 50
+  acceptedPatterns: 0
 };
 
 export const LocalLearning = {
@@ -33,15 +31,6 @@ export const LocalLearning = {
     } else {
       prefs.rejectedPatterns += 1;
     }
-    localStorage.setItem(KEY, JSON.stringify(prefs));
-  },
-  canGenerate() {
-    const prefs = LocalLearning.getPreferences();
-    return prefs.generationCount < prefs.generationLimit;
-  },
-  recordGeneration() {
-    const prefs = LocalLearning.getPreferences();
-    prefs.generationCount += 1;
     localStorage.setItem(KEY, JSON.stringify(prefs));
   }
 };

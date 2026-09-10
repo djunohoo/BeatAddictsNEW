@@ -6,11 +6,12 @@ import { ErrorScreen } from './components/ErrorScreen'
 
 const root = createRoot(document.getElementById('root')!)
 
-// App.tsx transitively imports src/lib/supabase.ts, which throws at module
-// load if VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY are missing. That happens
-// during import evaluation, before React ever mounts, so an ErrorBoundary
-// alone can't catch it — a dynamic import lets us catch it here instead of
-// white-screening with an uncaught exception.
+// A dynamic import catches any module-load-time throw during App.tsx's
+// import graph (before React mounts, so a React ErrorBoundary alone
+// wouldn't catch it) and shows ErrorScreen instead of white-screening.
+// src/lib/supabase.ts (which throws if its env vars are missing) is the
+// motivating case for this, but as of now nothing in src/ actually imports
+// that module — this guard is defensive for whenever something does.
 import('./App.tsx')
   .then(({ default: App }) => {
     root.render(

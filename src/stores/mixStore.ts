@@ -74,6 +74,35 @@ const defaultTracks = (): Record<TrackId, MixStrip> => ({
   lead: defaultStrip()
 });
 
+const TRACK_IDS = Object.keys(defaultTracks()) as TrackId[];
+
+// A stale/hand-edited/older-schema snapshot could be missing a track key
+// (e.g. from before `lead`/`bass` existed), and Mixer.tsx reads
+// `tracks[track.id]` with no optional chaining — loading such a snapshot
+// wholesale would crash the whole Mixer tab. Fill in any gaps from
+// defaults instead of trusting the parsed shape.
+const sanitizeSnapshot = (value: unknown): MixSnapshot | null => {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Partial<MixSnapshot>;
+  if (!raw.tracks || typeof raw.tracks !== 'object') return null;
+
+  const tracks = { ...defaultTracks() };
+  for (const id of TRACK_IDS) {
+    const strip = (raw.tracks as Record<string, unknown>)[id];
+    if (strip && typeof strip === 'object') {
+      tracks[id] = { ...defaultStrip(), ...(strip as Partial<MixStrip>) };
+    }
+  }
+
+  return {
+    masterVolume: typeof raw.masterVolume === 'number' ? raw.masterVolume : 78,
+    stereoWidth: typeof raw.stereoWidth === 'number' ? raw.stereoWidth : 90,
+    limiter: typeof raw.limiter === 'boolean' ? raw.limiter : true,
+    headphones: typeof raw.headphones === 'boolean' ? raw.headphones : false,
+    tracks
+  };
+};
+
 export const useMixStore = create<MixStore>((set, get) => ({
   masterVolume: 78,
   stereoWidth: 90,
@@ -130,7 +159,8 @@ export const useMixStore = create<MixStore>((set, get) => ({
     try {
       const raw = localStorage.getItem(SNAPSHOT_KEY);
       if (!raw) return false;
-      const snapshot: MixSnapshot = JSON.parse(raw);
+      const snapshot = sanitizeSnapshot(JSON.parse(raw));
+      if (!snapshot) return false;
       set(snapshot);
       return true;
     } catch {
