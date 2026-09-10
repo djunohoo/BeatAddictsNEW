@@ -215,6 +215,35 @@ each shipped as its own PR:
       disabled "Upgrade to Pro" card button does nothing (confirmed by
       screenshot — stayed on Dashboard); AI Studio shows the relabeled
       "Target DAW / Host" section; no console errors.
+- [~] **S5 — Persistence was localStorage-only despite a real Supabase project existing**
+      Added real server-side persistence for the saved-pattern library
+      (the "projects" S3 already made real on the Dashboard). New
+      `saved_patterns` Supabase table (`supabase/migrations/0002_saved_patterns.sql`,
+      same access model as 0001 — RLS on, no anon policies, service_role
+      only) plus three new backend endpoints: `POST /patterns` (upsert),
+      `GET /patterns?user_id=` (list), `DELETE /patterns/{id}` (not wired
+      to any UI yet — no delete-saved-pattern button exists — but there for
+      when one does). `Sequencer.tsx`'s `savePattern` now fire-and-forgets a
+      real save to the backend after its existing local save (never blocks
+      or interrupts the local-save UX on failure — just a quiet
+      `console.warn`); `loadSavedPatterns` tries the server first and, if
+      reachable, treats it as canonical and self-heals localStorage from
+      it, otherwise falls back to the existing local-only behavior
+      unchanged — works fully offline either way.
+      **Scope note**: this covers the saved-pattern library specifically,
+      not `projectStore`'s `currentProject` or Sequencer's own
+      in-progress session state (bpm/pattern-in-editor/etc, still
+      localStorage-only) — those weren't part of what Dashboard surfaces
+      as "projects," so extending this further is a separate, larger
+      change if wanted later.
+      Marked in-progress (`[~]`) rather than done: the migration SQL needs
+      to be run manually in the Supabase SQL Editor (same as 0001 — no
+      direct DB write access from here) before this actually persists
+      anywhere; until then it fails open exactly like every other Supabase
+      write in this backend (verified: `POST /patterns` → `{"saved":false}`,
+      `GET /patterns` → `{"patterns":null}`, no crash, local save/load still
+      works normally). Flip to `[x]` once the migration's been run and
+      confirmed.
 
 ---
 

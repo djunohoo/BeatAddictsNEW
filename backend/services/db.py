@@ -113,3 +113,65 @@ def count_all_generations(user_id: str) -> Optional[int]:
     except Exception:
         logger.exception("Failed to count total generations for user_id=%s", user_id)
         return None
+
+
+def save_pattern(user_id: str, pattern_id: str, name: str, genre: Optional[str], mood: Optional[str], style: Optional[str], pattern: Dict[str, Any], saved_at: Optional[str]) -> bool:
+    """Upsert one saved pattern to Supabase. Returns whether it actually
+    persisted (False if Supabase isn't configured or the write failed) so
+    the frontend can tell the difference between "saved for real" and
+    "only saved locally" instead of assuming success."""
+    client = _get_client()
+    if client is None:
+        return False
+    try:
+        record = {
+            "id": pattern_id,
+            "user_id": user_id,
+            "name": name,
+            "genre": genre,
+            "mood": mood,
+            "style": style,
+            "pattern": pattern,
+        }
+        if saved_at:
+            record["saved_at"] = saved_at
+        client.table("saved_patterns").upsert(record).execute()
+        return True
+    except Exception:
+        logger.exception("Failed to save pattern id=%s for user_id=%s", pattern_id, user_id)
+        return False
+
+
+def list_saved_patterns(user_id: str, limit: int = 50) -> Optional[list]:
+    """List saved patterns for user_id, most recent first. Returns None
+    (not an empty list) if Supabase isn't configured or the query failed,
+    so the caller can fall back to its local copy instead of wrongly
+    treating "couldn't check" as "there are none"."""
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        result = (
+            client.table("saved_patterns")
+            .select("id,name,genre,mood,style,pattern,saved_at")
+            .eq("user_id", user_id)
+            .order("saved_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return result.data
+    except Exception:
+        logger.exception("Failed to list saved patterns for user_id=%s", user_id)
+        return None
+
+
+def delete_saved_pattern(user_id: str, pattern_id: str) -> bool:
+    client = _get_client()
+    if client is None:
+        return False
+    try:
+        client.table("saved_patterns").delete().eq("id", pattern_id).eq("user_id", user_id).execute()
+        return True
+    except Exception:
+        logger.exception("Failed to delete pattern id=%s for user_id=%s", pattern_id, user_id)
+        return False
