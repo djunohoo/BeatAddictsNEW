@@ -1,4 +1,4 @@
-import { FlipVertical, Save, Shuffle, Sparkles, Trash2 } from 'lucide-react';
+import { Download, FlipVertical, Save, Shuffle, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { AIWorkflow } from '../../ai/AIWorkflow';
 import { formatDuration, isSupportedAudioFile, loadAudioFile, type LoadedSample } from '../../audio/sampleManager';
@@ -67,6 +67,7 @@ export const Sequencer = () => {
   const [density, setDensity] = useState(savedSession.density ?? 70);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isHealthChecking, setIsHealthChecking] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   // isPlaying/bpm/currentStep live in projectStore, not local state, so
   // Header's transport controls and Sequencer's own Play/Stop button share
   // one real playback state instead of two disconnected ones.
@@ -204,16 +205,15 @@ export const Sequencer = () => {
     return impulse;
   };
 
-  const ensureMasterBus = (ctx: AudioContext) => {
-    if (masterBusRef.current) return;
+  type MasterBus = { compressor: DynamicsCompressorNode; convolver: ConvolverNode; delay: DelayNode };
 
-    // Limiter: a DynamicsCompressorNode. Rather than rewiring the graph to
-    // toggle it, its threshold/ratio are set live in playHit() based on the
-    // mixer's `limiter` switch -- near-transparent when off, real limiting
-    // when on.
+  // Builds an independent master bus (limiter + reverb + delay) on any
+  // BaseAudioContext -- shared by live playback (cached in refs, see
+  // ensureMasterBus below) and offline WAV export (built fresh per render,
+  // see exportToWav), so both paths hear identical processing.
+  const createMasterBus = (ctx: BaseAudioContext): MasterBus => {
     const compressor = ctx.createDynamicsCompressor();
     compressor.connect(ctx.destination);
-    masterBusRef.current = compressor;
 
     const convolver = ctx.createConvolver();
     convolver.buffer = buildImpulseResponse(ctx, 2.2, 2.5);
@@ -221,7 +221,6 @@ export const Sequencer = () => {
     reverbWet.gain.value = 0.9;
     convolver.connect(reverbWet);
     reverbWet.connect(compressor);
-    reverbBusRef.current = convolver;
 
     const delay = ctx.createDelay(1.0);
     delay.delayTime.value = 0.28;
@@ -233,18 +232,25 @@ export const Sequencer = () => {
     feedback.connect(delay);
     delay.connect(delayWet);
     delayWet.connect(compressor);
-    delayBusRef.current = delay;
+
+    return { compressor, convolver, delay };
+  };
+
+  const ensureMasterBus = (ctx: AudioContext) => {
+    if (masterBusRef.current) return;
+    const bus = createMasterBus(ctx);
+    masterBusRef.current = bus.compressor;
+    reverbBusRef.current = bus.convolver;
+    delayBusRef.current = bus.delay;
   };
 
   // Every instrument's synthesis routes here instead of straight to
   // ctx.destination: a per-hit highpass/lowpass filter pair (from the
   // track's EQ knobs), then into the dry signal plus reverb/delay sends
-  // (from the track's send knobs) on the shared master bus. This is what
-  // makes the Mixer's EQ/reverb/delay controls actually change the sound
-  // instead of being inert UI state.
-  const buildTrackChain = (ctx: AudioContext, track: { highpass: number; lowpass: number; reverb: number; delay: number }): AudioNode => {
-    ensureMasterBus(ctx);
-
+  // (from the track's send knobs) on the master bus. This is what makes the
+  // Mixer's EQ/reverb/delay controls actually change the sound instead of
+  // being inert UI state -- shared by both live playback and WAV export.
+  const buildTrackChain = (ctx: BaseAudioContext, track: { highpass: number; lowpass: number; reverb: number; delay: number }, bus: MasterBus): AudioNode => {
     const highpass = ctx.createBiquadFilter();
     highpass.type = 'highpass';
     highpass.frequency.value = 20 + (track.highpass / 100) * 1980;
@@ -254,20 +260,19 @@ export const Sequencer = () => {
     lowpass.frequency.value = 200 + (track.lowpass / 100) * 19800;
 
     highpass.connect(lowpass);
-    if (masterBusRef.current) {
-      lowpass.connect(masterBusRef.current);
-    }
-    if (track.reverb > 0 && reverbBusRef.current) {
+    lowpass.connect(bus.compressor);
+
+    if (track.reverb > 0) {
       const send = ctx.createGain();
       send.gain.value = (track.reverb / 100) * 0.6;
       lowpass.connect(send);
-      send.connect(reverbBusRef.current);
+      send.connect(bus.convolver);
     }
-    if (track.delay > 0 && delayBusRef.current) {
+    if (track.delay > 0) {
       const send = ctx.createGain();
       send.gain.value = (track.delay / 100) * 0.5;
       lowpass.connect(send);
-      send.connect(delayBusRef.current);
+      send.connect(bus.delay);
     }
 
     return highpass;
@@ -453,13 +458,13 @@ export const Sequencer = () => {
     const widthFactor = mixState.stereoWidth / 100;
     const pan = (track.pan / 50) * widthFactor;
 
-    if (masterBusRef.current) {
-      // Live-updated per hit so toggling the Limiter switch takes effect
-      // immediately: near-transparent when off, real limiting when on.
-      masterBusRef.current.threshold.setValueAtTime(mixState.limiter ? -6 : 0, now);
-      masterBusRef.current.ratio.setValueAtTime(mixState.limiter ? 12 : 1, now);
-    }
-    const output = buildTrackChain(ctx, track);
+    if (!masterBusRef.current || !reverbBusRef.current || !delayBusRef.current) return;
+    // Live-updated per hit so toggling the Limiter switch takes effect
+    // immediately: near-transparent when off, real limiting when on.
+    masterBusRef.current.threshold.setValueAtTime(mixState.limiter ? -6 : 0, now);
+    masterBusRef.current.ratio.setValueAtTime(mixState.limiter ? 12 : 1, now);
+    const bus: MasterBus = { compressor: masterBusRef.current, convolver: reverbBusRef.current, delay: delayBusRef.current };
+    const output = buildTrackChain(ctx, track, bus);
 
     switch (instrumentId) {
       case 'kick':
@@ -487,7 +492,7 @@ export const Sequencer = () => {
   };
 
   // Professional kick drum synthesis
-  const playKickDrum = (ctx: AudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
+  const playKickDrum = (ctx: BaseAudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
     // Main oscillator for body
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
@@ -538,7 +543,7 @@ export const Sequencer = () => {
   };
 
   // Professional snare drum synthesis
-  const playSnareDrum = (ctx: AudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
+  const playSnareDrum = (ctx: BaseAudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
     // Tone oscillators
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
@@ -583,7 +588,7 @@ export const Sequencer = () => {
   };
 
   // Hi-hat synthesis
-  const playHiHat = (ctx: AudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
+  const playHiHat = (ctx: BaseAudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
     const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
     const noiseData = noiseBuffer.getChannelData(0);
     for (let i = 0; i < noiseData.length; i++) {
@@ -613,7 +618,7 @@ export const Sequencer = () => {
   };
 
   // Open hi-hat synthesis
-  const playOpenHat = (ctx: AudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
+  const playOpenHat = (ctx: BaseAudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
     const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.25, ctx.sampleRate);
     const noiseData = noiseBuffer.getChannelData(0);
     for (let i = 0; i < noiseData.length; i++) {
@@ -643,7 +648,7 @@ export const Sequencer = () => {
   };
 
   // Clap synthesis
-  const playClap = (ctx: AudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
+  const playClap = (ctx: BaseAudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
     const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.15, ctx.sampleRate);
     const noiseData = noiseBuffer.getChannelData(0);
     for (let i = 0; i < noiseData.length; i++) {
@@ -674,7 +679,7 @@ export const Sequencer = () => {
   };
 
   // Crash cymbal synthesis
-  const playCrash = (ctx: AudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
+  const playCrash = (ctx: BaseAudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
     const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.8, ctx.sampleRate);
     const noiseData = noiseBuffer.getChannelData(0);
     for (let i = 0; i < noiseData.length; i++) {
@@ -704,7 +709,7 @@ export const Sequencer = () => {
   };
 
   // Percussion synthesis
-  const playPercussion = (ctx: AudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
+  const playPercussion = (ctx: BaseAudioContext, time: number, volume: number, pan: number, output: AudioNode) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'square';
@@ -723,6 +728,132 @@ export const Sequencer = () => {
 
     osc.start(time);
     osc.stop(time + 0.2);
+  };
+
+  // Manual 16-bit PCM WAV encoder (no external dependency needed for
+  // something this small). Interleaves channels and clamps to [-1, 1].
+  const encodeWav = (buffer: AudioBuffer): Blob => {
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const numFrames = buffer.length;
+    const bytesPerSample = 2;
+    const blockAlign = numChannels * bytesPerSample;
+    const dataSize = numFrames * blockAlign;
+    const arrayBuffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(arrayBuffer);
+
+    const writeString = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i += 1) view.setUint8(offset + i, str.charCodeAt(i));
+    };
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bytesPerSample * 8, true);
+    writeString(36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    const channelData: Float32Array[] = [];
+    for (let ch = 0; ch < numChannels; ch += 1) {
+      channelData.push(buffer.getChannelData(ch));
+    }
+
+    let offset = 44;
+    for (let i = 0; i < numFrames; i += 1) {
+      for (let ch = 0; ch < numChannels; ch += 1) {
+        const sample = Math.max(-1, Math.min(1, channelData[ch][i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+        offset += 2;
+      }
+    }
+
+    return new Blob([arrayBuffer], { type: 'audio/wav' });
+  };
+
+  // Renders the current pattern (one loop, plus a tail so reverb/delay can
+  // decay) through an OfflineAudioContext, reusing the exact same synthesis
+  // functions and mixer chain (buildTrackChain/createMasterBus) as live
+  // playback -- what you hear in the sequencer is what you get in the file.
+  const exportToWav = async () => {
+    const hasNotes = Object.values(pattern).some((row) => row.some(Boolean));
+    if (!hasNotes) {
+      toast({
+        title: 'No notes to export',
+        description: 'Add at least one step before exporting.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const stepSec = (60 / bpm) / 4;
+      const loopSec = stepSec * 16;
+      const tailSec = 2.5;
+      const sampleRate = audioCtxRef.current?.sampleRate ?? 44100;
+      const offlineCtx = new OfflineAudioContext(2, Math.ceil(sampleRate * (loopSec + tailSec)), sampleRate);
+
+      const bus = createMasterBus(offlineCtx);
+      const mixState = useMixStore.getState();
+      bus.compressor.threshold.value = mixState.limiter ? -6 : 0;
+      bus.compressor.ratio.value = mixState.limiter ? 12 : 1;
+
+      for (let step = 0; step < 16; step += 1) {
+        const time = step * stepSec;
+        INSTRUMENTS.forEach((inst) => {
+          if (!pattern[inst.id]?.[step]) return;
+          const track = mixState.tracks[inst.id as keyof typeof mixState.tracks];
+          if (!track) return;
+          const soloActive = mixState.anySolo();
+          if (track.mute || (soloActive && !track.solo)) return;
+
+          const masterGain = (mixState.masterVolume ?? 100) / 100;
+          const trackGain = (track.volume ?? 100) / 100;
+          const volume = masterGain * trackGain;
+          const widthFactor = mixState.stereoWidth / 100;
+          const pan = (track.pan / 50) * widthFactor;
+          const output = buildTrackChain(offlineCtx, track, bus);
+
+          switch (inst.id) {
+            case 'kick': playKickDrum(offlineCtx, time, volume, pan, output); break;
+            case 'snare': playSnareDrum(offlineCtx, time, volume, pan, output); break;
+            case 'hihat': playHiHat(offlineCtx, time, volume * 0.6, pan, output); break;
+            case 'openhat': playOpenHat(offlineCtx, time, volume * 0.8, pan, output); break;
+            case 'clap': playClap(offlineCtx, time, volume, pan, output); break;
+            case 'crash': playCrash(offlineCtx, time, volume * 0.7, pan, output); break;
+            default: playPercussion(offlineCtx, time, volume, pan, output); break;
+          }
+        });
+      }
+
+      const rendered = await offlineCtx.startRendering();
+      const wavBlob = encodeWav(rendered);
+      const url = URL.createObjectURL(wavBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `beataddicts-pattern-${currentPattern}.wav`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({ title: 'Exported', description: 'Your pattern was rendered and downloaded as a WAV file.' });
+    } catch (error: any) {
+      toast({
+        title: 'Export failed',
+        description: error?.message || 'Could not render audio.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Pure step advance only -- setState updaters can be invoked more than
@@ -992,6 +1123,15 @@ export const Sequencer = () => {
               >
                 <Save className="w-4 h-4 mr-2" />
                 Save
+              </Button>
+              <Button
+                onClick={exportToWav}
+                disabled={isExporting}
+                variant="outline"
+                className="bg-[#1a1a2e] border-studio-border hover:bg-studio-surface disabled:opacity-50"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {isExporting ? 'Rendering...' : 'Export WAV'}
               </Button>
             </div>
           </div>
