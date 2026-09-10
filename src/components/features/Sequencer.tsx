@@ -1,5 +1,6 @@
 import { Download, FlipVertical, Save, Shuffle, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { AIClient } from '../../ai/AIClient';
 import { AIWorkflow } from '../../ai/AIWorkflow';
 import { formatDuration, isSupportedAudioFile, loadAudioFile, type LoadedSample } from '../../audio/sampleManager';
 import { useToast } from '../../hooks/use-toast';
@@ -170,24 +171,52 @@ export const Sequencer = () => {
     localStorage.setItem(PATTERN_LIBRARY_KEY, JSON.stringify(nextPatterns));
   };
 
-  const loadSavedPatterns = () => {
+  const readLocalSavedPatterns = (): SavedPatternEntry[] => {
     try {
       const raw = localStorage.getItem(PATTERN_LIBRARY_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        // Drop any entry whose pattern doesn't have every instrument key —
-        // loading a malformed one via loadSavedPattern() would crash the
-        // grid render (pattern[instrument.id].map(...) with no guard).
-        const valid = Array.isArray(parsed)
-          ? parsed.filter((entry): entry is SavedPatternEntry =>
-              !!entry && typeof entry === 'object' && typeof entry.id === 'string' && isValidPattern(entry.pattern)
-            )
-          : [];
-        setSavedPatterns(valid);
-      }
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      // Drop any entry whose pattern doesn't have every instrument key —
+      // loading a malformed one via loadSavedPattern() would crash the
+      // grid render (pattern[instrument.id].map(...) with no guard).
+      return Array.isArray(parsed)
+        ? parsed.filter((entry): entry is SavedPatternEntry =>
+            !!entry && typeof entry === 'object' && typeof entry.id === 'string' && isValidPattern(entry.pattern)
+          )
+        : [];
     } catch {
-      setSavedPatterns([]);
+      return [];
     }
+  };
+
+  const loadSavedPatterns = () => {
+    const local = readLocalSavedPatterns();
+    setSavedPatterns(local);
+
+    // Try the real server copy (S5) and, if it's actually reachable, treat
+    // it as canonical and self-heal localStorage from it -- otherwise keep
+    // the local-only behavior above so this works fully offline too.
+    AIClient.listPatternsRemote()
+      .then((res) => {
+        if (!Array.isArray(res?.patterns)) return; // null/unavailable -> keep local
+        const remote: SavedPatternEntry[] = res.patterns
+          .filter((entry: any) => entry && typeof entry.id === 'string' && isValidPattern(entry.pattern))
+          .map((entry: any) => ({
+            id: entry.id,
+            name: entry.name,
+            genre: entry.genre,
+            mood: entry.mood,
+            style: entry.style,
+            pattern: entry.pattern,
+            savedAt: entry.saved_at
+          }));
+        if (remote.length > 0) {
+          persistSavedPatterns(remote);
+        }
+      })
+      .catch(() => {
+        // Backend unreachable -- local copy (already set above) stands.
+      });
   };
 
   const toggleTrackMute = (instrumentId: string) => {
@@ -416,6 +445,28 @@ export const Sequencer = () => {
     const next = [entry, ...savedPatterns].slice(0, 12);
     persistSavedPatterns(next);
     setSelectedSavedPatternId(id);
+
+    // Best-effort real server-side backup (S5 from the strategic review --
+    // this used to be localStorage-only, gone forever on a cleared browser).
+    // Fire-and-forget: the local save above already succeeded and the user
+    // already sees "Pattern Saved", so a remote failure here shouldn't
+    // interrupt that -- just quietly note it didn't make it to the server.
+    AIClient.savePatternRemote({
+      id,
+      name: entry.name,
+      genre: entry.genre,
+      mood: entry.mood,
+      style: entry.style,
+      pattern: entry.pattern,
+      saved_at: entry.savedAt
+    }).then((res) => {
+      if (!res?.saved) {
+        console.warn('Pattern saved locally only -- server backup unavailable.');
+      }
+    }).catch(() => {
+      console.warn('Pattern saved locally only -- server backup request failed.');
+    });
+
     toast({
       title: 'Pattern Saved',
       description: `Saved ${entry.name} to your library.`

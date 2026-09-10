@@ -24,6 +24,15 @@ const getJson = async (path) => {
   return res.json();
 };
 
+const deleteJson = async (path) => {
+  const res = await fetch(`${DEFAULT_BASE_URL}${path}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `AI backend error (${res.status})`);
+  }
+  return res.json();
+};
+
 export const AIClient = {
   generateDrums: (payload) => postJson('/generate/drums', payload),
   generateBassline: (payload) => postJson('/generate/bassline', payload),
@@ -31,5 +40,8 @@ export const AIClient = {
   generateChords: (payload) => postJson('/generate/chords', payload),
   generateArrangement: (payload) => postJson('/generate/arrangement', payload),
   pulseChat: (payload) => postJson('/pulse/chat', payload),
-  getGenerationCount: (userId = 'local-user') => getJson(`/stats/generations?user_id=${encodeURIComponent(userId)}`)
+  getGenerationCount: (userId = 'local-user') => getJson(`/stats/generations?user_id=${encodeURIComponent(userId)}`),
+  savePatternRemote: (payload) => postJson('/patterns', payload),
+  listPatternsRemote: (userId = 'local-user') => getJson(`/patterns?user_id=${encodeURIComponent(userId)}`),
+  deletePatternRemote: (patternId, userId = 'local-user') => deleteJson(`/patterns/${encodeURIComponent(patternId)}?user_id=${encodeURIComponent(userId)}`)
 };

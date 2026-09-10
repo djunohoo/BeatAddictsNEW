@@ -17,7 +17,16 @@ from models.inference import (
     generate_arrangement,
 )
 from services.legal import enforce_phase0
-from services.db import log_generation, store_feedback, store_midi, enqueue_training_batch, count_all_generations
+from services.db import (
+    log_generation,
+    store_feedback,
+    store_midi,
+    enqueue_training_batch,
+    count_all_generations,
+    save_pattern,
+    list_saved_patterns,
+    delete_saved_pattern,
+)
 from services.pulse import get_pulse_reply, PulseUnavailable
 
 app = FastAPI(title="Beat Addicts AI Engine", version="0.1.0")
@@ -149,3 +158,39 @@ class TrainingBatchRequest(BaseModel):
 def training_batch(req: TrainingBatchRequest):
     enqueue_training_batch(req.user_id, req.batch_id)
     return {"status": "ok"}
+
+
+class SavedPatternRequest(BaseModel):
+    id: str
+    user_id: str = Field(default="local-user")
+    name: str
+    genre: Optional[str] = None
+    mood: Optional[str] = None
+    style: Optional[str] = None
+    pattern: Dict[str, Any]
+    saved_at: Optional[str] = None
+
+
+@app.post("/patterns")
+def save_pattern_endpoint(req: SavedPatternRequest):
+    """Real server-side persistence for the saved-pattern library (S5 from
+    the strategic review) -- previously localStorage-only. `saved: false`
+    means it only saved locally (Supabase not configured or the write
+    failed); the frontend keeps its localStorage copy either way, this is
+    a best-effort durability layer, not the only copy."""
+    saved = save_pattern(req.user_id, req.id, req.name, req.genre, req.mood, req.style, req.pattern, req.saved_at)
+    return {"saved": saved}
+
+
+@app.get("/patterns")
+def list_patterns_endpoint(user_id: str = "local-user"):
+    """`patterns: null` means Supabase isn't configured or the query
+    failed -- the frontend should fall back to its local copy, not treat
+    that as "you have zero saved patterns"."""
+    return {"patterns": list_saved_patterns(user_id)}
+
+
+@app.delete("/patterns/{pattern_id}")
+def delete_pattern_endpoint(pattern_id: str, user_id: str = "local-user"):
+    deleted = delete_saved_pattern(user_id, pattern_id)
+    return {"deleted": deleted}
