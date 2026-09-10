@@ -138,6 +138,24 @@ each shipped as its own PR:
       node creation during live playback: master bus nodes created exactly
       once (compressor/convolver/delay), highpass/lowpass filters created on
       every hit; fresh-tab console clean through a full play/stop cycle.
+- [x] **S2 — No audio export existed at all** (`src/components/features/Sequencer.tsx`)
+      Added a real "Export WAV" button. Renders the current pattern (one
+      loop, plus a 2.5s tail so reverb/delay can decay) through an
+      `OfflineAudioContext`, reusing the *exact same* synthesis functions and
+      mixer chain (`buildTrackChain`/the new `createMasterBus`, refactored
+      out of S1's live-playback code so both paths share one implementation
+      rather than diverging) — what you hear in the sequencer is what you
+      get in the file, not a separate re-implementation. Encodes the
+      rendered `AudioBuffer` to a 16-bit PCM WAV via a small manual encoder
+      (no new dependency needed) and triggers a browser download. Verified:
+      confirmed `OfflineAudioContext` rendering produces real non-zero audio
+      samples in this environment; confirmed the WAV encoder produces a
+      well-formed file (correct RIFF/WAVE/data chunk tags, exact expected
+      byte size) using the same encoding logic; ran the actual in-app export
+      end-to-end with no console errors, button correctly re-enabled after
+      completion. (Hit and fixed an unrelated Vite dev-server hiccup along
+      the way: a stale pre-bundled dependency chunk needed a cache clear —
+      not a code bug, just a dev-server quirk from adding a new icon import.)
 
 ---
 
