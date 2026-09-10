@@ -165,9 +165,10 @@ export const AIStudio = () => {
         </div>
       </div>
 
-      {/* Plugin Host Bridge Selection */}
+      {/* Target DAW/Host -- shapes the plugin-chain suggestion text below,
+          not a live connection to any actual DAW or plugin. */}
       <div className="mb-6">
-        <label className="text-sm font-semibold mb-2 block">Plugin Host Bridge</label>
+        <label className="text-sm font-semibold mb-2 block">Target DAW / Host</label>
         <div className="grid grid-cols-3 gap-2">
           {hostOptions.map((host) => (
             <button
@@ -264,7 +265,10 @@ export const AIStudio = () => {
 
       {pluginChain.length > 0 && (
         <div className="mb-6 p-4 rounded-lg border border-studio-border bg-studio-panel">
-          <div className="text-sm font-semibold mb-3">Plugin Chain Preview</div>
+          <div className="text-sm font-semibold mb-1">Suggested Plugin Chain</div>
+          <div className="text-xs text-muted-foreground mb-3">
+            A reference recipe for {selectedHost} — not loaded or connected automatically, set these up yourself in your DAW.
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {pluginChain.map((item) => (
               <div key={item.pluginId} className="rounded-lg bg-[#11141f] p-4 border border-[#22263b]">
@@ -329,7 +333,13 @@ export const AIStudio = () => {
         <p className="text-sm text-muted-foreground mb-3">
           Add professional vocals to your AI-generated tracks with custom voice cloning
         </p>
-        <Button variant="outline" size="sm" className="border-neon-pink/50 hover:bg-neon-pink/10 text-neon-pink">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled
+          title="Coming soon — billing isn't set up yet"
+          className="border-neon-pink/50 hover:bg-neon-pink/10 text-neon-pink disabled:opacity-50"
+        >
           Upgrade to Add Vocals
         </Button>
       </div>

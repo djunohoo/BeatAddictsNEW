@@ -10,7 +10,7 @@ import { Header } from './components/layout/Header';
 import { Toaster } from './components/ui/toaster';
 import { startStudioTimeTracking } from './lib/studioTime';
 
-type TabType = 'dashboard' | 'sequencer' | 'ai' | 'mixer' | 'voice' | 'tutorials';
+type TabType = 'dashboard' | 'sequencer' | 'ai' | 'mixer' | 'tutorials';
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -35,27 +35,6 @@ function App() {
         return <Tutorials />;
       case 'mixer':
         return <Mixer />;
-      case 'voice':
-        return (
-          <div className="flex-1 overflow-auto p-6 flex items-center justify-center">
-            <div className="text-center max-w-md glass-panel rounded-xl p-8">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-gradient-to-br from-neon-pink to-neon-purple flex items-center justify-center">
-                <span className="text-2xl">🎤</span>
-              </div>
-              <h2 className="text-2xl font-bold mb-2">AI Voice Cloning</h2>
-              <p className="text-muted-foreground mb-4">
-                Premium feature - Create custom vocals with AI voice cloning technology
-              </p>
-              <button
-                disabled
-                title="Coming soon — billing isn't set up yet"
-                className="px-6 py-3 bg-gradient-to-r from-neon-pink to-neon-purple rounded-lg font-semibold hover:shadow-xl transition-all opacity-50 cursor-not-allowed"
-              >
-                Upgrade to Pro
-              </button>
-            </div>
-          </div>
-        );
       default:
         return <Dashboard />;
     }

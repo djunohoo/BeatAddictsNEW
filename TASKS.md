@@ -191,6 +191,30 @@ each shipped as its own PR:
       route even after a full process restart — confirmed by testing
       without `--reload`, where the same code worked immediately. Not a
       code bug; noted for whoever runs this backend locally on Windows.)
+- [x] **S4 — Voice Clone dead nav tab; "Plugin Host Bridge" implied fake DAW interop**
+      A permanently disabled top-level nav tab erodes trust more than the
+      backend/AI fallback does, since at least that one warns you; a nav
+      item that's dead every single time you click it doesn't. And "Plugin
+      Host Bridge" reads like a live connection to Ableton/FL Studio —
+      it's actually just generated preset-recipe text (song title, preset
+      name, parameter values), no plugin ever gets loaded or connected.
+      - Removed Voice Clone from the persistent Sidebar nav entirely
+        (`Sidebar.tsx`, `App.tsx`'s `TabType`/render switch,
+        `Dashboard.tsx`'s prop type) — matches the same call already made
+        for F7's dead router scaffolding.
+      - Dashboard's "Voice Cloning" quick-start card and AI Studio's
+        "Upgrade to Add Vocals" CTA both kept (as honest premium teasers,
+        same pattern as elsewhere) but their buttons are now properly
+        `disabled` with a "coming soon" tooltip instead of silently
+        navigating to a dead tab or doing nothing on click.
+      - Relabeled "Plugin Host Bridge" → "Target DAW / Host" and "Plugin
+        Chain Preview" → "Suggested Plugin Chain", with an explicit note
+        ("not loaded or connected automatically, set these up yourself in
+        your DAW") instead of implying live interop.
+      Verified in-browser: sidebar shows 5 icons, not 6; clicking the now-
+      disabled "Upgrade to Pro" card button does nothing (confirmed by
+      screenshot — stayed on Dashboard); AI Studio shows the relabeled
+      "Target DAW / Host" section; no console errors.
 
 ---
 

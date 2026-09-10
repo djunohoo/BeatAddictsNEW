@@ -8,7 +8,7 @@ import type { SavedPatternEntry } from './Sequencer';
 const PATTERN_LIBRARY_KEY = 'beataddicts_saved_patterns';
 
 type DashboardProps = {
-  onNavigate: (tab: 'dashboard' | 'sequencer' | 'ai' | 'mixer' | 'voice' | 'tutorials') => void;
+  onNavigate: (tab: 'dashboard' | 'sequencer' | 'ai' | 'mixer' | 'tutorials') => void;
 };
 
 const formatRelativeTime = (iso?: string): string => {
@@ -192,8 +192,9 @@ export const Dashboard = ({ onNavigate }: DashboardProps) => {
             </p>
             <Button
               variant="outline"
-              className="w-full border-neon-pink/50 text-neon-pink hover:bg-neon-pink/10"
-              onClick={() => onNavigate('voice')}
+              disabled
+              title="Coming soon — billing isn't set up yet"
+              className="w-full border-neon-pink/50 text-neon-pink hover:bg-neon-pink/10 disabled:opacity-50"
             >
               Upgrade to Pro
             </Button>
