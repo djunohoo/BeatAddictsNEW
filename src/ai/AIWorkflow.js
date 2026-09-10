@@ -5,13 +5,20 @@ import { PatternAdapter } from './PatternAdapter';
 
 const buildPayload = (input) => {
   const prefs = LocalLearning.getPreferences();
-  const generationOk = LocalLearning.canGenerate();
   return {
     ...input,
     user_id: input.userId || 'local-user',
     opt_in: prefs.optIn === true,
+    // license_ok/generation_limit_ok are informational only -- the backend
+    // never trusts client-supplied values for either (see
+    // backend/services/legal.py). Real enforcement is a server-tracked
+    // daily cap per user_id plus a per-IP rate limit. There used to be a
+    // client-side generation counter here (LocalLearning.canGenerate()),
+    // but it was a lifetime cap with no reset that silently contradicted
+    // the server's real daily limit and nothing ever gated on its result
+    // anyway -- removed rather than left as a landmine.
     license_ok: true,
-    generation_limit_ok: generationOk,
+    generation_limit_ok: true,
     preferences: prefs
   };
 };
@@ -55,7 +62,6 @@ const tryGenerateRemote = async (apiCall, params) => {
   try {
     const payload = buildPayload(params);
     const data = await apiCall(payload);
-    LocalLearning.recordGeneration();
     return data;
   } catch (error) {
     console.warn('Remote AI request failed, falling back to local generation.', error);

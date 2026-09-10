@@ -8,6 +8,118 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 
 ---
 
+## Round 2 bug hunt (2026-09-09/10)
+
+A follow-up audit (4 parallel passes: backend, frontend components, AI
+integration/state, plus a separate strategic/concept review) after the real
+Supabase schema + real AI provider work above. All findings below fixed and
+verified.
+
+- [x] **R2-1 — `/generate/chords` crashed on any typical request**
+      (`backend/models/music_theory.py`) `build_chords()` was missing the
+      `complexity` clamp its sibling functions have; `complexity` defaults to
+      `None` on `GenerationRequest`, so omitting it (the normal case) hit
+      `None > 66` — raw 500. Fixed with the same clamp pattern as the others.
+- [x] **R2-2 — Daily generation cap trivially bypassed** (`backend/services/legal.py`)
+      The real server-tracked daily cap (from B4 above) is keyed on a
+      client-supplied, unauthenticated `user_id` — sending a fresh UUID per
+      request reset it every time. Added a per-IP sliding-window rate limit
+      (10/min default, `IP_RATE_LIMIT_PER_MINUTE`) as a backstop — still
+      spoofable, but raises the cost of abuse well above "increment a UUID"
+      without requiring real auth (B2, not built yet).
+- [x] **R2-3 — `/pulse/chat` could starve the shared worker threadpool**
+      (`backend/services/pulse.py`, `backend/app/main.py`) it was a sync
+      `def` route doing a blocking `httpx.post` with a 90s timeout,
+      occupying a shared thread for the whole duration. A handful of
+      concurrent chat requests against a slow upstream (no auth to stop
+      this) could hang every other endpoint including `/health`. Converted
+      to `async def` + `httpx.AsyncClient`.
+- [x] **R2-4 — Header's Play/Pause/Stop controlled nothing** (`src/components/layout/Header.tsx`,
+      `src/components/features/Sequencer.tsx`) Header wired transport
+      buttons to `projectStore`, but Sequencer — the only thing that
+      actually makes sound — maintained its own entirely separate
+      `isPlaying`/interval/AudioContext state that nothing in the store
+      touched. The most prominent global control in the app was dead; the
+      `stop()` action added earlier this session (F5) was built specifically
+      to fix this and didn't, because the disconnect was one level deeper.
+      Fixed by making Sequencer's real playback engine reactive to
+      `projectStore.isPlaying` (a `useEffect` starts/stops the actual
+      interval + validates notes exist + acquires the AudioContext when the
+      store flag flips, regardless of who flipped it) instead of
+      maintaining a redundant local flag. Verified in-browser: clicking
+      Header's Play/Stop now visibly drives the Sequencer's playhead and
+      button state, and vice versa.
+- [x] **R2-5 — BPM could silently diverge between Header and Sequencer**
+      Same root cause as R2-4 — Header edited `projectStore.currentProject.bpm`,
+      Sequencer played from its own separately-persisted local `bpm`. Fixed
+      by the same change: Sequencer now reads/writes `bpm` through
+      `projectStore` directly (no more separate `bpm` in its own
+      localStorage session), so there's one source of truth. Verified:
+      typed 150 into Header's BPM field, Sequencer's panel showed 150
+      instantly, no refresh needed.
+- [x] **R2-6 — StrictMode double-fires drum hits in dev** (`src/components/features/Sequencer.tsx`)
+      The tick interval's `setCurrentStep` updater had a side effect
+      (`playHit`) inside it. React 18 StrictMode deliberately double-invokes
+      `setState` updaters to catch exactly this kind of impurity, so every
+      tick played doubled/flanged in development. Split into a pure step
+      advance (interval callback) and a separate `useEffect` keyed on
+      `currentStep` that does the actual `playHit` side effect — the
+      React-idiomatic separation. Also fixed a related stale-closure risk in
+      the same code (the interval callback now reads the live step via
+      `useProjectStore.getState()` rather than closing over a value).
+- [x] **R2-7 — Unsafe `JSON.parse` on localStorage data could crash Mixer/Sequencer**
+      (`src/stores/mixStore.ts`, `src/components/features/Sequencer.tsx`) A
+      stale/hand-edited/older-schema mixer snapshot or saved pattern would
+      be trusted wholesale (`set(snapshot)` / `setPattern(entry.pattern)`)
+      with no shape validation, and downstream renders read `tracks[id]`/
+      `pattern[id]` with no optional chaining — a missing key would crash
+      the whole tab. Added `sanitizeSnapshot()` to `mixStore.ts` (fills gaps
+      from defaults instead of trusting the parsed shape) and a shape filter
+      on the saved-pattern list load in `Sequencer.tsx` (drops any entry
+      missing an instrument key instead of ever offering it in the dropdown).
+- [x] **R2-8 — `LocalLearning`'s client-side generation counter contradicted the real server limit**
+      (`src/ai/LocalLearning.js`, `src/ai/AIWorkflow.js`) It was a lifetime
+      cap (`generationCount` vs. a hardcoded `generationLimit: 50`) with no
+      daily reset, computed and shipped to the backend as
+      `generation_limit_ok` — but nothing in the frontend ever gated on the
+      result, so it was inert today and a landmine for whenever someone
+      wired it up (a user hitting 50 lifetime generations would be
+      permanently blocked client-side while the server's real daily limit
+      keeps resetting). Removed the dead counter/limit tracking entirely
+      (kept `recordFeedback`/genre preferences, which are a separate,
+      legitimate, non-contradictory feature); `generation_limit_ok` is now
+      just a hardcoded `true` with a comment explaining the backend never
+      trusts it anyway.
+- [x] **R2-9 — Stale/misleading comment in `main.tsx`**
+      Claimed `App.tsx` imports `src/lib/supabase.ts` as the reason for the
+      dynamic-import safety net; verified (again) that nothing in `src/`
+      imports that module. Reworded to describe the guard as defensive
+      rather than reacting to a live code path that doesn't exist.
+
+### Strategic/concept review findings (not yet acted on, logged for a product decision)
+
+A separate pass evaluated the app holistically rather than hunting bugs.
+Headline finding: the product markets itself as "AI-powered professional
+music production" but the honest implementation is a step sequencer with
+rules-based (not ML) generation, wrapped in DAW-flavored UI that promises
+more than it delivers. Specific gaps: no audio export exists at all; the
+**Mixer's effects (reverb/delay/EQ/stereo-width) are pure UI state that
+never touches the actual audio graph** — sliders move, sound doesn't change,
+identified as the single weakest link since it's the most "professional"-
+looking surface and the most hollow; "Plugin Host Bridge" implies DAW
+interop (Ableton/FL Studio) that doesn't exist, it's a text generator;
+Dashboard stats are fabricated/hardcoded; Voice Clone is a dead top-level
+nav tab; persistence is localStorage-only despite a real Supabase project
+now existing. Top 5 recommended fixes by impact/achievability: (1) real WAV
+export via `OfflineAudioContext` — the audio graph already exists, this is
+reachable; (2) make Mixer effects actually process audio; (3) replace
+fabricated Dashboard data or label it as sample content; (4) move project
+persistence server-side; (5) ship or remove Voice Clone as a nav tab. None
+of this has been actioned — it's a product-direction conversation, not a
+quick fix.
+
+---
+
 ## Real AI provider wired up (2026-09-08)
 
 Talked with Carrie directly to unblock the two "no real access/credentials"

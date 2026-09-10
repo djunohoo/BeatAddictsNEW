@@ -4,6 +4,7 @@ import { AIWorkflow } from '../../ai/AIWorkflow';
 import { formatDuration, isSupportedAudioFile, loadAudioFile, type LoadedSample } from '../../audio/sampleManager';
 import { useToast } from '../../hooks/use-toast';
 import { useMixStore } from '../../stores/mixStore';
+import { useProjectStore } from '../../stores/projectStore';
 import { runSystemHealthCheck, type HealthCheckResult } from '../../system/healthCheck';
 import { Button } from '../ui/button';
 
@@ -21,7 +22,6 @@ type Pattern = Record<string, boolean[]>;
 
 type SequencerSession = {
   pattern: Pattern;
-  bpm: number;
   currentPattern: number;
   selectedGenre: string;
   selectedMood: string;
@@ -66,10 +66,17 @@ export const Sequencer = () => {
   const [complexity, setComplexity] = useState(savedSession.complexity ?? 60);
   const [density, setDensity] = useState(savedSession.density ?? 70);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isHealthChecking, setIsHealthChecking] = useState(false);
-  const [bpm, setBpm] = useState(savedSession.bpm ?? 124);
-  const [currentStep, setCurrentStep] = useState(0);
+  // isPlaying/bpm/currentStep live in projectStore, not local state, so
+  // Header's transport controls and Sequencer's own Play/Stop button share
+  // one real playback state instead of two disconnected ones.
+  const isPlaying = useProjectStore((s) => s.isPlaying);
+  const togglePlay = useProjectStore((s) => s.togglePlay);
+  const stopStore = useProjectStore((s) => s.stop);
+  const bpm = useProjectStore((s) => s.currentProject?.bpm ?? 124);
+  const setBpm = useProjectStore((s) => s.setBPM);
+  const currentStep = useProjectStore((s) => s.currentStep);
+  const setCurrentStep = useProjectStore((s) => s.setCurrentStep);
   const [savedPatterns, setSavedPatterns] = useState<Array<{ id: string; name: string; genre: string; mood: string; style: string; pattern: Pattern }>>([]);
   const [selectedSavedPatternId, setSelectedSavedPatternId] = useState('');
   const [loadedSamples, setLoadedSamples] = useState<LoadedSample[]>([]);
@@ -97,7 +104,6 @@ export const Sequencer = () => {
     try {
       const session: SequencerSession = {
         pattern,
-        bpm,
         currentPattern,
         selectedGenre,
         selectedMood,
@@ -110,7 +116,7 @@ export const Sequencer = () => {
       // localStorage unavailable (private browsing, storage full, etc.) —
       // autosave silently no-ops rather than breaking the editor.
     }
-  }, [pattern, bpm, currentPattern, selectedGenre, selectedMood, selectedStyle, complexity, density]);
+  }, [pattern, currentPattern, selectedGenre, selectedMood, selectedStyle, complexity, density]);
 
   const toggleStep = (instrumentId: string, stepIndex: number) => {
     setPattern((prev) => ({
@@ -150,8 +156,16 @@ export const Sequencer = () => {
     try {
       const raw = localStorage.getItem(PATTERN_LIBRARY_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw) as Array<{ id: string; name: string; genre: string; mood: string; style: string; pattern: Pattern }>;
-        setSavedPatterns(parsed);
+        const parsed = JSON.parse(raw);
+        // Drop any entry whose pattern doesn't have every instrument key —
+        // loading a malformed one via loadSavedPattern() would crash the
+        // grid render (pattern[instrument.id].map(...) with no guard).
+        const valid = Array.isArray(parsed)
+          ? parsed.filter((entry): entry is { id: string; name: string; genre: string; mood: string; style: string; pattern: Pattern } =>
+              !!entry && typeof entry === 'object' && typeof entry.id === 'string' && isValidPattern(entry.pattern)
+            )
+          : [];
+        setSavedPatterns(valid);
       }
     } catch {
       setSavedPatterns([]);
@@ -326,12 +340,7 @@ export const Sequencer = () => {
   };
 
   const stopPlayback = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    setIsPlaying(false);
-    setCurrentStep(0);
+    stopStore();
   };
 
   const playHit = (instrumentId: string) => {
@@ -616,28 +625,39 @@ export const Sequencer = () => {
     osc.stop(time + 0.2);
   };
 
+  // Pure step advance only -- setState updaters can be invoked more than
+  // once (React 18 StrictMode does this deliberately to catch impure
+  // updaters), which would double-fire drum hits if the audio side effect
+  // lived inside this updater. Reads live step from the store via
+  // getState() rather than closing over `currentStep`, since this callback
+  // is captured once per scheduleTicks() call and would otherwise go stale
+  // exactly like the old pattern-closure bug this file already fixed once.
   const scheduleTicks = (tickBpm: number) => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
     const stepMs = (60_000 / tickBpm) / 4;
     intervalRef.current = window.setInterval(() => {
-      setCurrentStep((prev) => {
-        const next = (prev + 1) % 16;
-        const livePattern = patternRef.current;
-        INSTRUMENTS.forEach((inst) => {
-          if (livePattern?.[inst.id]?.[next]) {
-            playHit(inst.id);
-          }
-        });
-        return next;
-      });
+      const next = (useProjectStore.getState().currentStep + 1) % 16;
+      setCurrentStep(next);
     }, stepMs);
   };
 
-  const startPlayback = async () => {
-    if (isPlaying) return;
+  // Play the active hits for the current step as a real side effect,
+  // separate from the pure step-advance above.
+  useEffect(() => {
+    if (!isPlaying) return;
+    const livePattern = patternRef.current;
+    INSTRUMENTS.forEach((inst) => {
+      if (livePattern?.[inst.id]?.[currentStep]) {
+        playHit(inst.id);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep]);
 
+  const startPlayback = () => {
+    if (isPlaying) return;
     const hasNotes = Object.values(pattern).some((row) => row.some(Boolean));
     if (!hasNotes) {
       toast({
@@ -647,18 +667,50 @@ export const Sequencer = () => {
       });
       return;
     }
-
-    const ctx = await ensureAudioContext();
-    if (!ctx) return;
-
-    setIsPlaying(true);
-    scheduleTicks(bpm);
+    togglePlay();
   };
+
+  // The actual playback engine, driven by isPlaying from the shared store
+  // rather than a local flag -- this is what makes Header's transport
+  // controls (which only flip the store's isPlaying) actually start/stop
+  // real audio, instead of toggling a boolean nobody reads.
+  useEffect(() => {
+    if (!isPlaying) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return;
+    }
+
+    const hasNotes = Object.values(patternRef.current ?? {}).some((row) => row.some(Boolean));
+    if (!hasNotes) {
+      toast({
+        title: 'No notes to play',
+        description: 'Add at least one step before starting playback.',
+        variant: 'destructive'
+      });
+      stopStore();
+      return;
+    }
+
+    let cancelled = false;
+    ensureAudioContext().then((ctx) => {
+      if (cancelled || !ctx) return;
+      scheduleTicks(bpm);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying]);
 
   // Restart the tick interval at the new tempo when BPM changes mid-playback,
   // instead of leaving a stale-closure interval running at the old rate.
+  // Guarded on intervalRef so this doesn't race the async start-up above.
   useEffect(() => {
-    if (isPlaying) {
+    if (isPlaying && intervalRef.current) {
       scheduleTicks(bpm);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
