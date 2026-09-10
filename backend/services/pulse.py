@@ -24,7 +24,7 @@ class PulseUnavailable(Exception):
 DEFAULT_MODEL = os.getenv("ONSPACE_AI_MODEL", "qwen3:14b")
 
 
-def get_pulse_reply(message: str, conversation_history: Optional[List[dict]]) -> str:
+async def get_pulse_reply(message: str, conversation_history: Optional[List[dict]]) -> str:
     base_url = os.getenv("ONSPACE_AI_BASE_URL")
     api_key = os.getenv("ONSPACE_AI_API_KEY")
 
@@ -40,17 +40,17 @@ def get_pulse_reply(message: str, conversation_history: Optional[List[dict]]) ->
         headers["Authorization"] = f"Bearer {api_key}"
 
     try:
-        response = httpx.post(
-            f"{base_url}/chat/completions",
-            headers=headers,
-            json={
-                "model": DEFAULT_MODEL,
-                "messages": messages,
-                "temperature": 0.8,
-                "max_tokens": 200,
-            },
-            timeout=90.0,
-        )
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            response = await client.post(
+                f"{base_url}/chat/completions",
+                headers=headers,
+                json={
+                    "model": DEFAULT_MODEL,
+                    "messages": messages,
+                    "temperature": 0.8,
+                    "max_tokens": 200,
+                },
+            )
         response.raise_for_status()
     except httpx.HTTPError:
         logger.exception("Pulse chat upstream request failed")
